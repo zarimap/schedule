@@ -141,14 +141,14 @@
 
         /* 🔄 全面ローディングオーバーレイのスタイル */
         .loading-overlay {
-            display: flex; /* 初期状態で表示 */
+            display: flex;
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             background-color: rgba(255, 255, 255, 0.8);
-            z-index: 99999; /* 全ての要素の最前面に配置 */
+            z-index: 99999;
             justify-content: center;
             align-items: center;
             flex-direction: column;
@@ -177,7 +177,7 @@
 </head>
 <body>
 
-    <!-- 🔄 ローディング画面（初期表示 ON） -->
+    <!-- 🔄 ローディング画面 -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="spinner"></div>
         <div class="loading-text" id="loadingText">Loading…</div>
@@ -295,7 +295,6 @@
             right: 'today'
           },
           events: async function(fetchInfo, successCallback, failureCallback) {
-            // 初期データ読み込み時のローディング表示
             showLoading('Loading…');
             try {
               const data = await callGasApi();
@@ -321,13 +320,11 @@
               alert('予定の取得に失敗しました');
               successCallback([]);
             } finally {
-              // 通信完了（成功・失敗問わず）でローディング解除
               hideLoading();
             }
           },
           eventClick: async function(info) {
             if (confirm('「' + info.event.title + '」を削除しますか？')) {
-              // 削除中のローディング表示 & 操作無効化
               showLoading('削除中…');
               try {
                 const result = await callGasApi({
@@ -356,7 +353,6 @@
           var date = eventDateInput.value;
 
           if (title && date) {
-            // 追加中のローディング表示 & 操作無効化
             showLoading('追加中…');
             try {
               const data = await callGasApi({
@@ -369,18 +365,12 @@
 
               if (data.error) throw new Error(data.error);
 
-              if (Array.isArray(data) && data.length > 0) {
-                calendar.addEvent({
-                  id: data[0].id,
-                  title: data[0].title,
-                  start: data[0].start,
-                  allDay: data[0].all_day
-                });
+              // 既存の手動追加(addEvent)を廃止し、DB再取得(refetchEvents)に統一して重複を防止
+              calendar.refetchEvents();
 
-                eventTitleInput.value = '';
-                eventDateInput.value = '';
-                alert('追加しました！');
-              }
+              eventTitleInput.value = '';
+              eventDateInput.value = '';
+              alert('追加しました！');
             } catch (err) {
               console.error('追加失敗:', err.message);
               alert('追加に失敗しました');
