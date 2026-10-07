@@ -58,7 +58,7 @@
         }
         .field-box {
             flex: 1 1 0%;
-            min-width: 0; /* ブラウザごとの表示崩れ防止 */
+            min-width: 0;
         }
         .range-separator {
             width: 28px;
@@ -320,7 +320,7 @@
       }
 
       // ==========================================
-      // 1. GAS API 通信 (自動再試行・自動リロード付き)
+      // 1. GAS API 通信 (堅牢な自動リトライ・再読み込み機能付き)
       // ==========================================
       const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxlFIYrp2JuigWirQ6aGd0SrDjrQOWcZ3KooV5esH-6DqQL-fAtk5tTwi387J6p_fQAQA/exec';
 
@@ -347,26 +347,25 @@
 
             const response = await fetch(url, fetchOptions);
             if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
+              throw new Error(`HTTP Error Status: ${response.status}`);
             }
             
             const json = await response.json();
-            if (json.error) {
+            if (json && json.error) {
               throw new Error(json.error);
             }
 
-            return json; // 正常取得
+            return json; // 通信成功
 
           } catch (err) {
-            console.warn(`通信失敗 (試行 ${attempt}/${maxRetries}):`, err.message);
+            console.warn(`通信失敗 (${attempt}/${maxRetries}):`, err.message);
 
             if (attempt < maxRetries) {
               showLoading(`通信に失敗しました。再接続中… (${attempt}/${maxRetries})`);
-              await new Promise(res => setTimeout(res, 2000)); // 2秒待って再試行
+              await new Promise(res => setTimeout(res, 2000));
             } else {
-              // 全ての再試行が失敗した場合、画面を自動リロード
-              showLoading('通信エラーが発生したためページを再読み込みします…');
-              await new Promise(res => setTimeout(res, 1500));
+              showLoading('通信エラーが発生したため、ページをリロードします…');
+              await new Promise(res => setTimeout(res, 1200));
               window.location.reload();
               throw err;
             }
@@ -444,9 +443,10 @@
 
               successCallback(events);
             } catch (err) {
-              console.error('取得失敗:', err.message);
-              successCallback([]);
+              console.error('取得処理例外:', err.message);
+              failureCallback(err);
             } finally {
+              // 通信の成否・リトライ有無にかかわらず必ずローディング表示を閉じる
               hideLoading();
             }
           },
@@ -461,7 +461,7 @@
 
                 info.event.remove();
               } catch (err) {
-                console.error('削除失敗:', err.message);
+                console.error('削除処理例外:', err.message);
               } finally {
                 hideLoading();
               }
@@ -481,6 +481,7 @@
           var endTime = eventEndTime.value;
 
           if (!title || !startDate) {
+            alert('予定の名前と開始日を入力してください');
             return;
           }
 
@@ -494,6 +495,7 @@
             endIso = endD.toISOString().split('T')[0];
           } else {
             if (!startTime) {
+              alert('開始時間を入力してください');
               return;
             }
             startIso = `${startDate}T${startTime}:00`;
@@ -533,7 +535,7 @@
             eventEndTime.disabled = true;
 
           } catch (err) {
-            console.error('追加失敗:', err.message);
+            console.error('追加処理例外:', err.message);
           } finally {
             hideLoading();
           }
