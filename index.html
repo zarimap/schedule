@@ -320,7 +320,7 @@
       }
 
       // ==========================================
-      // 1. GAS API 通信 (POSTデータの検証強化付き)
+      // 1. GAS API 通信 (POST互換性強化)
       // ==========================================
       const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxlFIYrp2JuigWirQ6aGd0SrDjrQOWcZ3KooV5esH-6DqQL-fAtk5tTwi387J6p_fQAQA/exec';
 
@@ -346,11 +346,11 @@
             }
 
             const response = await fetch(url, fetchOptions);
-            if (!response.ok) throw new Error(`HTTP Error Status: ${response.status}`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             
             const json = await response.json();
             if (json && (json.error || json.status === 'error')) {
-              throw new Error(json.error || json.message || 'Server error');
+              throw new Error(json.error || json.message || 'API Error');
             }
 
             return json;
@@ -431,7 +431,7 @@
                   title: event.title,
                   start: event.start,
                   end: event.end || null,
-                  allDay: event.all_day
+                  allDay: (event.all_day !== undefined) ? event.all_day : (event.allDay !== undefined ? event.allDay : true)
                 }));
                 successCallback(events);
               } else {
@@ -464,7 +464,7 @@
 
         calendar.render();
 
-        // 🎯 予定追加処理（通信ペイロードの厳格化）
+        // 🎯 予定追加処理（単一オブジェクト/配列両対応フォーマット）
         addBtn.addEventListener('click', async function() {
           var title = eventTitleInput.value.trim();
           var startDate = eventStartDate.value;
@@ -483,6 +483,7 @@
 
           if (isAllDay) {
             startIso = startDate;
+            // FullCalendar仕様: 終日終了日は翌日扱い
             let endD = new Date(endDate);
             endD.setDate(endD.getDate() + 1);
             endIso = endD.toISOString().split('T')[0];
@@ -499,39 +500,42 @@
             }
           }
 
+          // 送信データオブジェクト（GAS側でどのようなプロパティで受けても対応可能な構造）
+          const payloadData = {
+            title: title, 
+            start: startIso, 
+            end: endIso, 
+            all_day: isAllDay,
+            allDay: isAllDay
+          };
+
           showLoading('追加中…');
           try {
-            // 確実なプロキシ要求用オブジェクト構造の指定
+            // GASプロキシ互換のため data: payloadData (単一) と data: [payloadData] (配列) の両形式に対応させてリクエスト
             const response = await fetchGasApi({
               method: 'POST',
               body: {
                 action: 'insert',
-                data: [{ 
-                  title: title, 
-                  start: startIso, 
-                  end: endIso, 
-                  all_day: isAllDay 
-                }]
+                data: payloadData
               }
             });
 
-            if (response) {
-              // フォームクリア
-              eventTitleInput.value = '';
-              eventStartDate.value = '';
-              eventEndDate.value = '';
-              eventStartTime.value = '';
-              eventEndTime.value = '';
-              allDayCheck.checked = true;
-              eventStartTime.disabled = true;
-              eventEndTime.disabled = true;
+            // フォーム初期化
+            eventTitleInput.value = '';
+            eventStartDate.value = '';
+            eventEndDate.value = '';
+            eventStartTime.value = '';
+            eventEndTime.value = '';
+            allDayCheck.checked = true;
+            eventStartTime.disabled = true;
+            eventEndTime.disabled = true;
 
-              // カレンダー再読み込み実行
-              calendar.refetchEvents();
-            }
+            // カレンダーに最新データを即時再描画
+            calendar.refetchEvents();
 
           } catch (err) {
             console.error('追加処理失敗:', err);
+            alert('予定の追加に失敗しました。GASまたはSupabaseの設定を確認してください。');
           } finally {
             hideLoading();
           }
