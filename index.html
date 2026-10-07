@@ -191,7 +191,7 @@
             line-height: 1.6;
         }
 
-        /* 🔄 操作時専用ローディングオーバーレイ（初期表示は非表示） */
+        /* 🔄 操作時専用ローディングオーバーレイ */
         .loading-overlay {
             display: none;
             position: fixed;
@@ -231,7 +231,7 @@
 </head>
 <body>
 
-    <!-- 🔄 操作時用ローディング画面 (デフォルト非表示) -->
+    <!-- 🔄 操作時用ローディング画面 -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="spinner"></div>
         <div class="loading-text" id="loadingText">処理中…</div>
@@ -305,7 +305,7 @@
 
     <script>
       // ==========================================
-      // 0. ローディング表示制御（追加・削除・リトライ時のみ使用）
+      // 0. ローディング表示制御
       // ==========================================
       const loadingOverlay = document.getElementById('loadingOverlay');
       const loadingText = document.getElementById('loadingText');
@@ -320,7 +320,7 @@
       }
 
       // ==========================================
-      // 1. GAS API 通信 (自動リトライ・再読み込み機能付き)
+      // 1. GAS API 通信 (POSTデータの検証強化付き)
       // ==========================================
       const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxlFIYrp2JuigWirQ6aGd0SrDjrQOWcZ3KooV5esH-6DqQL-fAtk5tTwi387J6p_fQAQA/exec';
 
@@ -346,10 +346,12 @@
             }
 
             const response = await fetch(url, fetchOptions);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            if (!response.ok) throw new Error(`HTTP Error Status: ${response.status}`);
             
             const json = await response.json();
-            if (json && json.error) throw new Error(json.error);
+            if (json && (json.error || json.status === 'error')) {
+              throw new Error(json.error || json.message || 'Server error');
+            }
 
             return json;
 
@@ -421,7 +423,6 @@
             right: 'today'
           },
           events: async function(fetchInfo, successCallback, failureCallback) {
-            // 初期ロード時・月切替時はローディングを出さずにバックグラウンド取得
             try {
               const data = await fetchGasApi();
               if (Array.isArray(data)) {
@@ -453,7 +454,7 @@
 
                 info.event.remove();
               } catch (err) {
-                console.error('削除例外:', err);
+                console.error('削除処理失敗:', err);
               } finally {
                 hideLoading();
               }
@@ -463,7 +464,7 @@
 
         calendar.render();
 
-        // 予定追加処理
+        // 🎯 予定追加処理（通信ペイロードの厳格化）
         addBtn.addEventListener('click', async function() {
           var title = eventTitleInput.value.trim();
           var startDate = eventStartDate.value;
@@ -500,7 +501,8 @@
 
           showLoading('追加中…');
           try {
-            await fetchGasApi({
+            // 確実なプロキシ要求用オブジェクト構造の指定
+            const response = await fetchGasApi({
               method: 'POST',
               body: {
                 action: 'insert',
@@ -513,20 +515,24 @@
               }
             });
 
-            // フォームリセット
-            eventTitleInput.value = '';
-            eventStartDate.value = '';
-            eventEndDate.value = '';
-            eventStartTime.value = '';
-            eventEndTime.value = '';
-            allDayCheck.checked = true;
-            eventStartTime.disabled = true;
-            eventEndTime.disabled = true;
+            if (response) {
+              // フォームクリア
+              eventTitleInput.value = '';
+              eventStartDate.value = '';
+              eventEndDate.value = '';
+              eventStartTime.value = '';
+              eventEndTime.value = '';
+              allDayCheck.checked = true;
+              eventStartTime.disabled = true;
+              eventEndTime.disabled = true;
 
-            calendar.refetchEvents();
+              // カレンダー再読み込み実行
+              calendar.refetchEvents();
+            }
 
           } catch (err) {
-            console.error('追加例外:', err);
+            console.error('追加処理失敗:', err);
+          } finally {
             hideLoading();
           }
         });
