@@ -35,28 +35,41 @@
         .form-container h2 { margin-top: 0; font-size: 1.2rem; }
         
         .form-group {
-            margin-bottom: 12px;
+            margin-bottom: 14px;
         }
         .form-group label {
             display: block;
             font-size: 0.9rem;
             font-weight: bold;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
             color: #555;
         }
+
+        /* 🎯 横並びフォーム（日付・時間）の中央揃え＆被り防止レイアウト */
         .form-row {
             display: flex;
-            gap: 10px;
-            align-items: center;
+            align-items: center; /* 上下中央揃え */
+            justify-content: space-between;
+            width: 100%;
         }
         .form-row > div {
-            flex: 1;
+            flex: 1; /* 左右の入力枠を均等サイズに */
+            min-width: 0; /* 文字あふれ防止 */
+        }
+        .form-row .range-separator {
+            flex-shrink: 0; /* 波線が押しつぶされるのを防止 */
+            margin: 0 10px; /* 被りを防ぐ左右余白 */
+            font-weight: bold;
+            color: #666;
+            text-align: center;
+            line-height: 1;
         }
 
         input[type="text"], input[type="date"], input[type="time"] {
             width: 100%;
-            padding: 10px;
-            margin: 4px 0;
+            height: 42px; /* 高さを統一して揃える */
+            padding: 8px 10px;
+            margin: 0; /* 余計なマージンを排除 */
             border: 1px solid #ccc;
             border-radius: 6px;
             box-sizing: border-box;
@@ -73,7 +86,7 @@
         .checkbox-container {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
             margin-top: 6px;
             cursor: pointer;
             font-size: 0.95rem;
@@ -84,6 +97,7 @@
             width: 18px;
             height: 18px;
             cursor: pointer;
+            margin: 0;
         }
 
         button {
@@ -250,7 +264,7 @@
                 <div>
                     <input type="date" id="eventStartDate">
                 </div>
-                <span style="align-self: center;">〜</span>
+                <span class="range-separator">〜</span>
                 <div>
                     <input type="date" id="eventEndDate">
                 </div>
@@ -270,7 +284,7 @@
                 <div>
                     <input type="time" id="eventStartTime" disabled>
                 </div>
-                <span style="align-self: center;">〜</span>
+                <span class="range-separator">〜</span>
                 <div>
                     <input type="time" id="eventEndTime" disabled>
                 </div>
@@ -462,7 +476,6 @@
 
           if (isAllDay) {
             startIso = startDate;
-            // 終日イベントで複数日に跨る場合、FullCalendar仕様に合わせ終了日の翌日を計算
             let endD = new Date(endDate);
             endD.setDate(endD.getDate() + 1);
             endIso = endD.toISOString().split('T')[0];
