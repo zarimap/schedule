@@ -343,6 +343,16 @@
         var calendar = new FullCalendar.Calendar(calendarEl, {
           initialView: 'dayGridMonth',
           locale: 'ja',
+          
+          // 🎯 時間範囲表示の設定（「8:00 - 13:00」形式）
+          displayEventEnd: true,
+          eventTimeFormat: {
+            hour: 'numeric',
+            minute: '2-digit',
+            meridiem: false,
+            omitZeroMinute: false
+          },
+
           headerToolbar: {
             left: 'prev,next',
             center: 'title',
@@ -388,7 +398,6 @@
 
         calendar.render();
 
-        // 🎯 予定追加処理（即時画面反映 ＆ タイムゾーン同期修正）
         addBtn.addEventListener('click', async function() {
           var title = eventTitleInput.value.trim();
           var startDate = eventStartDate.value;
@@ -415,7 +424,6 @@
               alert('開始時間を入力してください');
               return;
             }
-            // 🎯 日本時間 (JST +09:00) を付与して 0時ズレを徹底防止
             startIso = `${startDate}T${startTime}:00+09:00`;
             if (endTime) {
               endIso = `${endDate}T${endTime}:00+09:00`;
@@ -440,7 +448,6 @@
             });
 
             if (res) {
-              // 🎯 即座に画面（カレンダー）に新しい要素を描画
               const insertedItem = Array.isArray(res) ? res[0] : res;
               
               calendar.addEvent({
@@ -451,7 +458,6 @@
                 allDay: isAllDay
               });
 
-              // フォームリセット
               eventTitleInput.value = '';
               eventStartDate.value = '';
               eventEndDate.value = '';
