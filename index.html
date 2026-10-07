@@ -191,19 +191,20 @@
             line-height: 1.6;
         }
 
-        /* 🔄 全面ローディングオーバーレイ */
+        /* 🔄 操作時専用ローディングオーバーレイ（初期表示は非表示） */
         .loading-overlay {
-            display: flex !important;
+            display: none;
             position: fixed;
             top: 0;
             left: 0;
             width: 100vw;
             height: 100vh;
-            background-color: #ffffff;
+            background-color: rgba(255, 255, 255, 0.85);
             z-index: 999999;
             justify-content: center;
             align-items: center;
             flex-direction: column;
+            backdrop-filter: blur(2px);
         }
         .spinner {
             width: 50px;
@@ -230,10 +231,10 @@
 </head>
 <body>
 
-    <!-- 🔄 ローディング画面 (初期表示 ON) -->
+    <!-- 🔄 操作時用ローディング画面 (デフォルト非表示) -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="spinner"></div>
-        <div class="loading-text" id="loadingText">読み込み中…</div>
+        <div class="loading-text" id="loadingText">処理中…</div>
     </div>
 
     <!-- ヘッダーエリア -->
@@ -304,26 +305,26 @@
 
     <script>
       // ==========================================
-      // 0. ローディング表示制御
+      // 0. ローディング表示制御（追加・削除・リトライ時のみ使用）
       // ==========================================
       const loadingOverlay = document.getElementById('loadingOverlay');
       const loadingText = document.getElementById('loadingText');
 
-      function showLoading(msg = '読み込み中…') {
+      function showLoading(msg = '処理中…') {
         loadingText.textContent = msg;
-        loadingOverlay.style.setProperty('display', 'flex', 'important');
+        loadingOverlay.style.display = 'flex';
       }
 
       function hideLoading() {
-        loadingOverlay.style.setProperty('display', 'none', 'important');
+        loadingOverlay.style.display = 'none';
       }
 
       // ==========================================
-      // 1. GAS API 通信 (高速・最小遅延リトライ)
+      // 1. GAS API 通信 (自動リトライ・再読み込み機能付き)
       // ==========================================
       const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxlFIYrp2JuigWirQ6aGd0SrDjrQOWcZ3KooV5esH-6DqQL-fAtk5tTwi387J6p_fQAQA/exec';
 
-      async function fetchGasApi(options = {}, maxRetries = 2) {
+      async function fetchGasApi(options = {}, maxRetries = 3) {
         let attempt = 0;
         
         while (attempt < maxRetries) {
@@ -356,9 +357,11 @@
             console.warn(`通信失敗 (${attempt}/${maxRetries}):`, err.message);
 
             if (attempt < maxRetries) {
-              showLoading(`再接続中… (${attempt}/${maxRetries})`);
+              showLoading(`通信に失敗しました。再接続中… (${attempt}/${maxRetries})`);
+              await new Promise(res => setTimeout(res, 2000));
             } else {
               showLoading('通信エラー。ページをリロードします…');
+              await new Promise(res => setTimeout(res, 1000));
               window.location.reload();
               return null;
             }
@@ -418,7 +421,7 @@
             right: 'today'
           },
           events: async function(fetchInfo, successCallback, failureCallback) {
-            showLoading('読み込み中…');
+            // 初期ロード時・月切替時はローディングを出さずにバックグラウンド取得
             try {
               const data = await fetchGasApi();
               if (Array.isArray(data)) {
