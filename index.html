@@ -33,15 +33,59 @@
             box-sizing: border-box;
         }
         .form-container h2 { margin-top: 0; font-size: 1.2rem; }
-        input[type="text"], input[type="date"] {
+        
+        .form-group {
+            margin-bottom: 12px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 0.9rem;
+            font-weight: bold;
+            margin-bottom: 4px;
+            color: #555;
+        }
+        .form-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .form-row > div {
+            flex: 1;
+        }
+
+        input[type="text"], input[type="date"], input[type="time"] {
             width: 100%;
             padding: 10px;
-            margin: 10px 0;
+            margin: 4px 0;
             border: 1px solid #ccc;
             border-radius: 6px;
             box-sizing: border-box;
-            font-size: 16px;
+            font-size: 15px;
         }
+
+        input:disabled {
+            background-color: #e9ecef;
+            color: #6c757d;
+            cursor: not-allowed;
+            border-color: #ced4da;
+        }
+
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 6px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            user-select: none;
+        }
+
+        .checkbox-container input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
         button {
             width: 100%;
             padding: 12px;
@@ -51,6 +95,7 @@
             border-radius: 6px;
             font-size: 16px;
             cursor: pointer;
+            margin-top: 10px;
         }
         button:active { background-color: #0056b3; }
         
@@ -80,7 +125,7 @@
             background-color: #5a6268;
         }
 
-        /* 使い方モーダル（画面中央表示）のスタイル */
+        /* 使い方モーダルのスタイル */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -139,7 +184,7 @@
             margin-bottom: 8px;
         }
 
-        /* 🔄 全面ローディングオーバーレイのスタイル */
+        /* 🔄 全面ローディングオーバーレイ */
         .loading-overlay {
             display: flex;
             position: fixed;
@@ -193,8 +238,45 @@
 
     <div class="form-container">
         <h2>📅 予定を追加する</h2>
-        <input type="text" id="eventTitle" placeholder="予定の名前（例：実験A）">
-        <input type="date" id="eventDate">
+        
+        <div class="form-group">
+            <label for="eventTitle">予定の名前</label>
+            <input type="text" id="eventTitle" placeholder="（例：夏合宿、実験A）">
+        </div>
+
+        <div class="form-group">
+            <label>期間指定</label>
+            <div class="form-row">
+                <div>
+                    <input type="date" id="eventStartDate">
+                </div>
+                <span style="align-self: center;">〜</span>
+                <div>
+                    <input type="date" id="eventEndDate">
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <div class="checkbox-container">
+                <input type="checkbox" id="allDayCheck" checked>
+                <label for="allDayCheck" style="margin:0; cursor:pointer;">終日</label>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>時間指定</label>
+            <div class="form-row">
+                <div>
+                    <input type="time" id="eventStartTime" disabled>
+                </div>
+                <span style="align-self: center;">〜</span>
+                <div>
+                    <input type="time" id="eventEndTime" disabled>
+                </div>
+            </div>
+        </div>
+
         <button id="addBtn">カレンダーに追加</button>
     </div>
 
@@ -205,7 +287,8 @@
             <h3>📖 予定管理の使い方</h3>
             <ul>
                 <li><strong>予定の確認:</strong> カレンダー上で科学部の予定を確認できます。</li>
-                <li><strong>予定の追加:</strong> カレンダー下のフォームに「予定の名前」と「日付」を入力し、「カレンダーに追加」を押します。</li>
+                <li><strong>予定の追加:</strong> カレンダー下のフォームから「予定名」「期間」「時間」を設定して追加します。</li>
+                <li><strong>終日・時間設定:</strong> 終日チェックを外すと時間の入力が可能になります。</li>
                 <li><strong>予定の削除:</strong> カレンダー上の予定をクリック（タップ）すると削除できます。</li>
             </ul>
         </div>
@@ -257,24 +340,41 @@
       }
 
       // ==========================================
-      // 2. モーダル表示制御
+      // 2. UI制御 (モーダル & 終日チェック)
       // ==========================================
       document.addEventListener('DOMContentLoaded', function() {
         const openHelpBtn = document.getElementById('openHelpBtn');
         const closeHelpBtn = document.getElementById('closeHelpBtn');
         const helpModal = document.getElementById('helpModal');
 
-        openHelpBtn.addEventListener('click', function() {
-          helpModal.style.display = 'flex';
+        const allDayCheck = document.getElementById('allDayCheck');
+        const eventStartTime = document.getElementById('eventStartTime');
+        const eventEndTime = document.getElementById('eventEndTime');
+        const eventStartDate = document.getElementById('eventStartDate');
+        const eventEndDate = document.getElementById('eventEndDate');
+
+        // モーダル
+        openHelpBtn.addEventListener('click', () => helpModal.style.display = 'flex');
+        closeHelpBtn.addEventListener('click', () => helpModal.style.display = 'none');
+        helpModal.addEventListener('click', (e) => {
+          if (e.target === helpModal) helpModal.style.display = 'none';
         });
 
-        closeHelpBtn.addEventListener('click', function() {
-          helpModal.style.display = 'none';
+        // 終日チェックボックス連動制御
+        allDayCheck.addEventListener('change', function() {
+          const isAllDay = this.checked;
+          eventStartTime.disabled = isAllDay;
+          eventEndTime.disabled = isAllDay;
+          if (isAllDay) {
+            eventStartTime.value = '';
+            eventEndTime.value = '';
+          }
         });
 
-        helpModal.addEventListener('click', function(e) {
-          if (e.target === helpModal) {
-            helpModal.style.display = 'none';
+        // 開始日入力時に終了日が空なら自動で同じ日を設定
+        eventStartDate.addEventListener('change', function() {
+          if (!eventEndDate.value) {
+            eventEndDate.value = this.value;
           }
         });
 
@@ -283,7 +383,6 @@
         // ==========================================
         var calendarEl = document.getElementById('calendar');
         var eventTitleInput = document.getElementById('eventTitle');
-        var eventDateInput = document.getElementById('eventDate');
         var addBtn = document.getElementById('addBtn');
 
         var calendar = new FullCalendar.Calendar(calendarEl, {
@@ -299,18 +398,14 @@
             try {
               const data = await callGasApi();
 
-              if (data.error) {
-                throw new Error(data.error);
-              }
-
-              if (!Array.isArray(data)) {
-                throw new Error('受領したデータが配列形式ではありません');
-              }
+              if (data.error) throw new Error(data.error);
+              if (!Array.isArray(data)) throw new Error('受領したデータが配列形式ではありません');
 
               const events = data.map(event => ({
                 id: event.id,
                 title: event.title,
                 start: event.start,
+                end: event.end || null,
                 allDay: event.all_day
               }));
 
@@ -348,37 +443,78 @@
 
         calendar.render();
 
+        // 予定追加処理
         addBtn.addEventListener('click', async function() {
-          var title = eventTitleInput.value;
-          var date = eventDateInput.value;
+          var title = eventTitleInput.value.trim();
+          var startDate = eventStartDate.value;
+          var endDate = eventEndDate.value || startDate;
+          var isAllDay = allDayCheck.checked;
+          var startTime = eventStartTime.value;
+          var endTime = eventEndTime.value;
 
-          if (title && date) {
-            showLoading('追加中…');
-            try {
-              const data = await callGasApi({
-                method: 'POST',
-                body: {
-                  action: 'insert',
-                  data: [{ title: title, start: date, all_day: true }]
-                }
-              });
+          if (!title || !startDate) {
+            alert('予定の名前と開始日を入力してください');
+            return;
+          }
 
-              if (data.error) throw new Error(data.error);
+          let startIso = '';
+          let endIso = '';
 
-              // 既存の手動追加(addEvent)を廃止し、DB再取得(refetchEvents)に統一して重複を防止
-              calendar.refetchEvents();
-
-              eventTitleInput.value = '';
-              eventDateInput.value = '';
-              alert('追加しました！');
-            } catch (err) {
-              console.error('追加失敗:', err.message);
-              alert('追加に失敗しました');
-            } finally {
-              hideLoading();
-            }
+          if (isAllDay) {
+            startIso = startDate;
+            // 終日イベントで複数日に跨る場合、FullCalendar仕様に合わせ終了日の翌日を計算
+            let endD = new Date(endDate);
+            endD.setDate(endD.getDate() + 1);
+            endIso = endD.toISOString().split('T')[0];
           } else {
-            alert('タイトルと日付を入力してください');
+            if (!startTime) {
+              alert('時間指定の開始時刻を入力してください');
+              return;
+            }
+            startIso = `${startDate}T${startTime}:00`;
+            if (endTime) {
+              endIso = `${endDate}T${endTime}:00`;
+            } else {
+              endIso = `${endDate}T${startTime}:00`;
+            }
+          }
+
+          showLoading('追加中…');
+          try {
+            const data = await callGasApi({
+              method: 'POST',
+              body: {
+                action: 'insert',
+                data: [{ 
+                  title: title, 
+                  start: startIso, 
+                  end: endIso, 
+                  all_day: isAllDay 
+                }]
+              }
+            });
+
+            if (data.error) throw new Error(data.error);
+
+            // カレンダー更新
+            calendar.refetchEvents();
+
+            // フォームのクリア
+            eventTitleInput.value = '';
+            eventStartDate.value = '';
+            eventEndDate.value = '';
+            eventStartTime.value = '';
+            eventEndTime.value = '';
+            allDayCheck.checked = true;
+            eventStartTime.disabled = true;
+            eventEndTime.disabled = true;
+
+            alert('追加しました！');
+          } catch (err) {
+            console.error('追加失敗:', err.message);
+            alert('追加に失敗しました');
+          } finally {
+            hideLoading();
           }
         });
       });
