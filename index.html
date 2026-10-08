@@ -365,7 +365,7 @@
             console.warn(`通信試行 (${attempt}/${maxRetries}):`, err.message);
 
             if (attempt < maxRetries) {
-              showLoading(`再試行中… (${attempt}/${maxRetries})`);
+              // 🎯 サイレント再試行（画面オーバーレイを表示せずにバックグラウンドで処理）
               await new Promise(res => setTimeout(res, 1000));
             } else {
               hideLoading();
@@ -440,7 +440,7 @@
             right: 'today'
           },
 
-          // 🎯 カスタムイベント描画（完全同一幅の2ブロック構造化）
+          // 🎯 カスタムイベント描画（青丸固定＋2ブロック完全平行構造）
           eventContent: function(arg) {
             let nodes = [];
 
@@ -459,7 +459,6 @@
             let content = document.createElement('div');
             content.className = 'fc-event-scroll-content';
 
-            // 🎯 2つの独立したスパンタグに分割し、translateX(-50%)での計算ズレを完全に排除
             let span1 = document.createElement('span');
             span1.className = 'fc-event-text-block';
             span1.innerText = baseText + '　　';
@@ -477,22 +476,19 @@
             return { domNodes: nodes };
           },
 
-          // 🎯 表示枠幅と比較して判定
+          // 🎯 枠幅に応じた自動アニメーション付与
           eventDidMount: function(arg) {
             requestAnimationFrame(() => {
               const el = arg.el;
               const wrapper = el.querySelector('.fc-event-scroll-wrapper');
-              const content = el.querySelector('.fc-event-scroll-content');
               const blocks = el.querySelectorAll('.fc-event-text-block');
               
               if (wrapper && blocks.length > 0) {
-                // 1ブロック分の正確な幅を取得
                 const singleBlockWidth = blocks[0].offsetWidth;
                 
                 if (singleBlockWidth > wrapper.clientWidth) {
                   el.classList.add('has-overflow');
                 } else {
-                  // はみ出していない場合は2つ目のブロックを取り除き静止
                   if (blocks[1]) blocks[1].remove();
                 }
               }
