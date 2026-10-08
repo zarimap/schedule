@@ -25,7 +25,7 @@
         }
 
         /* -------------------------------------------------- */
-        /* 🎯 弾幕アニメーション・枠内オーバーフロー専用スタイル */
+        /* 🎯 弾幕アニメーション・シームレスループ専用スタイル  */
         /* -------------------------------------------------- */
         .fc-event {
             overflow: hidden !important;
@@ -33,7 +33,7 @@
             max-width: 100% !important;
         }
 
-        /* イベント内部コンテナ */
+        /* イベント内部コンテナ（青丸＋流れるテキストを横並び） */
         .fc-event-main {
             overflow: hidden !important;
             white-space: nowrap !important;
@@ -42,37 +42,43 @@
             width: 100%;
         }
 
-        /* 時間指定イベントのDot（青丸）枠 */
+        /* 青丸（Dot）は左端に固定して動かさない */
         .fc-daygrid-event-dot {
             flex-shrink: 0;
             margin-right: 4px;
         }
 
-        /* スクロール対象のラッパー（枠の左端から開始） */
+        /* テキスト表示エリア（青丸の右隣を可視領域の左端とする） */
+        .fc-event-scroll-wrapper {
+            overflow: hidden;
+            white-space: nowrap;
+            flex-grow: 1;
+            min-width: 0;
+        }
+
         .fc-event-scroll-content {
             display: inline-block;
             white-space: nowrap;
             will-change: transform;
         }
 
-        /* はみ出ている要素（.has-overflow）のみ弾幕スクロールを発動 */
+        /* はみ出ている要素（.has-overflow）のみエンドレスループ弾幕を発動 */
         .fc-event.has-overflow .fc-event-scroll-content {
-            padding-right: 40px; /* ループ時の余白 */
-            animation: danmaku-left-start 8s linear infinite;
+            animation: seamless-danmaku 8s linear infinite;
         }
 
-        /* タップ・ホバー時にアニメーションを一時停止 */
+        /* ホバーまたはタップ時にアニメーションを一時停止 */
         .fc-event:hover .fc-event-scroll-content {
             animation-play-state: paused;
         }
 
-        /* 左端（0%）から開始し、全文字分＋余白を左へ流すキーフレーム */
-        @keyframes danmaku-left-start {
+        /* 1セット分（-50%）移動したら一瞬で0%に戻り、切れ目なくループ */
+        @keyframes seamless-danmaku {
             0% {
                 transform: translateX(0%);
             }
             100% {
-                transform: translateX(-100%);
+                transform: translateX(-50%);
             }
         }
 
@@ -425,27 +431,51 @@
             right: 'today'
           },
 
-          // 🎯 カスタムイベント描画（時間＋タイトルを構造化して一体化）
+          // 🎯 カスタムイベント描画（青丸の独立 ＆ シームレスループ構造化）
           eventContent: function(arg) {
+            let nodes = [];
+
+            // 1. 終日でない場合は「青丸（Dot）」要素を固定配置
+            if (!arg.event.allDay) {
+              let dot = document.createElement('div');
+              dot.className = 'fc-daygrid-event-dot';
+              nodes.push(dot);
+            }
+
+            // 2. テキスト＋全角スペース2つ＋テキスト（シームレスループ用）
             let timeText = arg.timeText ? arg.timeText + ' ' : '';
-            let fullText = timeText + arg.event.title;
+            let baseText = timeText + arg.event.title;
+            let loopText = baseText + '　　' + baseText;
 
-            let container = document.createElement('div');
-            container.className = 'fc-event-scroll-content';
-            container.innerText = fullText;
+            let wrapper = document.createElement('div');
+            wrapper.className = 'fc-event-scroll-wrapper';
 
-            return { domNodes: [container] };
+            let content = document.createElement('div');
+            content.className = 'fc-event-scroll-content';
+            content.innerText = loopText;
+
+            wrapper.appendChild(content);
+            nodes.push(wrapper);
+
+            return { domNodes: nodes };
           },
 
-          // 🎯 要素描画完了時に枠幅を超えているか判定してアニメーションを適用
+          // 🎯 枠幅を超えているか判定してアニメーションを適用
           eventDidMount: function(arg) {
             requestAnimationFrame(() => {
               const el = arg.el;
-              const contentEl = el.querySelector('.fc-event-scroll-content');
-              if (contentEl) {
-                // コンテンツ幅が表示枠幅より大きい場合のみクラス付与
-                if (contentEl.scrollWidth > el.clientWidth) {
+              const wrapper = el.querySelector('.fc-event-scroll-wrapper');
+              const content = el.querySelector('.fc-event-scroll-content');
+              
+              if (wrapper && content) {
+                // 1セット分の長さ（全幅の約半分）を表示枠幅と比較
+                const singleSetWidth = content.scrollWidth / 2;
+                if (singleSetWidth > wrapper.clientWidth) {
                   el.classList.add('has-overflow');
+                } else {
+                  // はみ出ていない場合はループ用の後半部分を消して静止表示
+                  const timeText = arg.timeText ? arg.timeText + ' ' : '';
+                  content.innerText = timeText + arg.event.title;
                 }
               }
             });
