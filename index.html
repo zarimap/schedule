@@ -364,6 +364,7 @@
             console.warn(`通信試行 (${attempt}/${maxRetries}):`, err.message);
 
             if (attempt < maxRetries) {
+              // 🎯 サイレントリトライ（画面表示を出さずバックグラウンドで処理）
               await new Promise(res => setTimeout(res, 1000));
             } else {
               hideLoading();
@@ -438,7 +439,7 @@
             right: 'today'
           },
 
-          // 🎯 カスタム描画
+          // 🎯 初期描画時は必ず「単一ブロック」のみを出力（重複の根絶）
           eventContent: function(arg) {
             let nodes = [];
 
@@ -457,45 +458,54 @@
             let content = document.createElement('div');
             content.className = 'fc-event-scroll-content';
 
+            // 初期レンダリングは1個のみ（全角スペースなし）
             let span1 = document.createElement('span');
             span1.className = 'fc-event-text-block';
-            span1.innerText = baseText + '　　';
-
-            let span2 = document.createElement('span');
-            span2.className = 'fc-event-text-block';
-            span2.innerText = baseText + '　　';
+            span1.innerText = baseText;
 
             content.appendChild(span1);
-            content.appendChild(span2);
-
             wrapper.appendChild(content);
             nodes.push(wrapper);
 
             return { domNodes: nodes };
           },
 
-          // 🎯 短文時の重複表示を即時排除＆弾幕判定の徹底修正
+          // 🎯 幅判定後に「はみ出している長文」の場合のみ2個目を動的生成・追加
           eventDidMount: function(arg) {
             requestAnimationFrame(() => {
               const el = arg.el;
               const wrapper = el.querySelector('.fc-event-scroll-wrapper');
-              const blocks = el.querySelectorAll('.fc-event-text-block');
+              const content = el.querySelector('.fc-event-scroll-content');
+              const firstBlock = el.querySelector('.fc-event-text-block');
               
-              if (wrapper && blocks.length > 0) {
-                const singleBlockWidth = blocks[0].offsetWidth;
-                
-                // 枠幅を超えている場合のみ has-overflow を付与
-                if (singleBlockWidth > wrapper.clientWidth + 2) {
+              if (wrapper && firstBlock && content) {
+                // 1ブロックの文字列幅が表示領域（wrapper）を超えているか判定
+                if (firstBlock.offsetWidth > wrapper.clientWidth + 1) {
+                  let timeText = arg.timeText ? arg.timeText + ' ' : '';
+                  let baseText = timeText + arg.event.title;
+
+                  // 長文のみ：全角スペース2つを付与し、2個目の複製ブロックを挿入
+                  firstBlock.innerText = baseText + '　　';
+
+                  // 既存の2個目があれば削除してから追加
+                  const existingBlocks = content.querySelectorAll('.fc-event-text-block');
+                  if (existingBlocks.length > 1) {
+                    existingBlocks[1].remove();
+                  }
+
+                  let span2 = document.createElement('span');
+                  span2.className = 'fc-event-text-block';
+                  span2.innerText = baseText + '　　';
+                  content.appendChild(span2);
+
                   el.classList.add('has-overflow');
                 } else {
-                  // 超えていない短文の場合は has-overflow を外し、2つ目のブロックを確実に削除
+                  // 短文：アニメーションを解除し、ブロックは1つのまま固定
                   el.classList.remove('has-overflow');
-                  if (blocks[1]) {
-                    blocks[1].remove();
+                  const existingBlocks = content.querySelectorAll('.fc-event-text-block');
+                  if (existingBlocks.length > 1) {
+                    existingBlocks[1].remove();
                   }
-                  // 1つ目の末尾の全角スペースも消してスッキリさせる
-                  let timeText = arg.timeText ? arg.timeText + ' ' : '';
-                  blocks[0].innerText = timeText + arg.event.title;
                 }
               }
             });
@@ -517,15 +527,9 @@
               if (Array.isArray(freshData)) {
                 localStorage.setItem(CACHE_KEY, JSON.stringify(freshData));
                 
+                // 初回のみ手動で描画、キャッシュがある場合は refetchEvents 側の安全な更新に任せる
                 if (!cachedData) {
                   successCallback(formatEvents(freshData));
-                } else {
-                  // 🎯 1秒の重複表示を防ぐ静かな差分更新処理
-                  const currentSource = calendar.getEventSources()[0];
-                  if (currentSource) {
-                    currentSource.remove();
-                  }
-                  calendar.addEventSource(formatEvents(freshData));
                 }
               }
             } catch (err) {
@@ -544,13 +548,16 @@
                   body: { action: 'delete', id: info.event.id }
                 });
 
-                info.event.remove();
-
+                // キャッシュを更新してカレンダーをクリーン再描画
                 const cachedData = localStorage.getItem(CACHE_KEY);
                 if (cachedData) {
                   const parsed = JSON.parse(cachedData).filter(item => String(item.id) !== String(info.event.id));
                   localStorage.setItem(CACHE_KEY, JSON.stringify(parsed));
                 }
+
+                // 🎯 一貫した安全な更新
+                calendar.refetchEvents();
+
               } catch (err) {
                 alert('削除に失敗しました');
               } finally {
@@ -623,14 +630,14 @@
                 allDay: isAllDay
               };
 
-              // カレンダーへ追加
-              calendar.addEvent(createdEvent);
-
-              // ローカルキャッシュ更新
+              // キャッシュを更新してカレンダーをクリーン再描画
               const cachedData = localStorage.getItem(CACHE_KEY);
               let currentCache = cachedData ? JSON.parse(cachedData) : [];
               currentCache.push(insertedItem.id ? insertedItem : createdEvent);
               localStorage.setItem(CACHE_KEY, JSON.stringify(currentCache));
+
+              // 🎯 差分競合を防ぐ単一更新手法
+              calendar.refetchEvents();
 
               eventTitleInput.value = '';
               eventStartDate.value = '';
