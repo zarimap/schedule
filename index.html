@@ -25,7 +25,7 @@
         }
 
         /* -------------------------------------------------- */
-        /* 🎯 完全シームレス＆冒頭一時停止 弾幕専用スタイル   */
+        /* 🎯 シームレス＆冒頭一時停止 弾幕専用スタイル      */
         /* -------------------------------------------------- */
         .fc-event {
             overflow: hidden !important;
@@ -78,7 +78,6 @@
             animation-play-state: paused;
         }
 
-        /* 🎯 冒頭に「溜め（静止時間）」を作り、ピッタリ-50%でシームレスループするアニメーション */
         @keyframes seamless-danmaku-pause {
             0% {
                 transform: translateX(0%);
@@ -87,7 +86,7 @@
                 transform: translateX(0%); /* 最初の約1.5秒は静止（硬直時間） */
             }
             100% {
-                transform: translateX(-50%); /* 2ブロック構造の半分（ぴったり1ブロック分）移動して0%へ滑らかに戻る */
+                transform: translateX(-50%); /* ぴったり1ブロック分移動して滑らかにループ */
             }
         }
 
@@ -365,7 +364,6 @@
             console.warn(`通信試行 (${attempt}/${maxRetries}):`, err.message);
 
             if (attempt < maxRetries) {
-              // 🎯 サイレント再試行（画面オーバーレイを表示せずにバックグラウンドで処理）
               await new Promise(res => setTimeout(res, 1000));
             } else {
               hideLoading();
@@ -440,7 +438,7 @@
             right: 'today'
           },
 
-          // 🎯 カスタムイベント描画（青丸固定＋2ブロック完全平行構造）
+          // 🎯 カスタム描画
           eventContent: function(arg) {
             let nodes = [];
 
@@ -476,7 +474,7 @@
             return { domNodes: nodes };
           },
 
-          // 🎯 枠幅に応じた自動アニメーション付与
+          // 🎯 短文時の重複表示を即時排除＆弾幕判定の徹底修正
           eventDidMount: function(arg) {
             requestAnimationFrame(() => {
               const el = arg.el;
@@ -486,10 +484,18 @@
               if (wrapper && blocks.length > 0) {
                 const singleBlockWidth = blocks[0].offsetWidth;
                 
-                if (singleBlockWidth > wrapper.clientWidth) {
+                // 枠幅を超えている場合のみ has-overflow を付与
+                if (singleBlockWidth > wrapper.clientWidth + 2) {
                   el.classList.add('has-overflow');
                 } else {
-                  if (blocks[1]) blocks[1].remove();
+                  // 超えていない短文の場合は has-overflow を外し、2つ目のブロックを確実に削除
+                  el.classList.remove('has-overflow');
+                  if (blocks[1]) {
+                    blocks[1].remove();
+                  }
+                  // 1つ目の末尾の全角スペースも消してスッキリさせる
+                  let timeText = arg.timeText ? arg.timeText + ' ' : '';
+                  blocks[0].innerText = timeText + arg.event.title;
                 }
               }
             });
@@ -514,7 +520,11 @@
                 if (!cachedData) {
                   successCallback(formatEvents(freshData));
                 } else {
-                  calendar.removeAllEvents();
+                  // 🎯 1秒の重複表示を防ぐ静かな差分更新処理
+                  const currentSource = calendar.getEventSources()[0];
+                  if (currentSource) {
+                    currentSource.remove();
+                  }
                   calendar.addEventSource(formatEvents(freshData));
                 }
               }
@@ -613,8 +623,10 @@
                 allDay: isAllDay
               };
 
+              // カレンダーへ追加
               calendar.addEvent(createdEvent);
 
+              // ローカルキャッシュ更新
               const cachedData = localStorage.getItem(CACHE_KEY);
               let currentCache = cachedData ? JSON.parse(cachedData) : [];
               currentCache.push(insertedItem.id ? insertedItem : createdEvent);
