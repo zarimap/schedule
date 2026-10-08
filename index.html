@@ -25,6 +25,19 @@
         }
 
         /* -------------------------------------------------- */
+        /* 🎯 過去予定のグレーアウトスタイル                 */
+        /* -------------------------------------------------- */
+        .fc-event.is-past {
+            background-color: #9e9e9e !important; /* グレー背景 */
+            border-color: #9e9e9e !important;
+            color: #ffffff !important;
+            opacity: 0.6 !important;             /* 過去予定を半透明化 */
+        }
+        .fc-event.is-past .fc-event-text-block {
+            color: #ffffff !important;
+        }
+
+        /* -------------------------------------------------- */
         /* 🎯 祝日スタイル（*から始まる予定）                   */
         /* -------------------------------------------------- */
         .fc-event.is-holiday {
@@ -320,9 +333,9 @@
             <ul>
                 <li><strong>予定の確認:</strong> カレンダー上で科学部の予定を確認できます。</li>
                 <li><strong>祝日の登録:</strong> 予定名の先頭に <code>*</code> を入力すると赤背景（祝日）として登録されます。</li>
+                <li><strong>過去の予定:</strong> 既に終了した過去の予定は自動的にグレーアウト表示されます。</li>
                 <li><strong>予定の追加:</strong> フォームから「予定名」「期間」「時間」を設定して追加します。</li>
                 <li><strong>予定の削除:</strong> カレンダー上の予定をクリックして削除します。</li>
-                <li><strong>読み込みの高速化:</strong> 端末のブラウザで通常のタブにて使用してください。およそ10秒短くなります。</li>
             </ul>
         </div>
     </div>
@@ -462,7 +475,6 @@
               nodes.push(dot);
             }
 
-            // タイトルが * から始まる場合は祝日としてテキストから * を取り除く
             let rawTitle = arg.event.title || '';
             let displayTitle = rawTitle.startsWith('*') ? rawTitle.slice(1) : rawTitle;
 
@@ -486,13 +498,25 @@
             return { domNodes: nodes };
           },
 
-          // 🎯 幅判定 ＆ 祝日クラス（is-holiday）の動的付与
+          // 🎯 幅判定 ＆ 祝日 ＆ 過去予定（is-past）の動的判定
           eventDidMount: function(arg) {
             const el = arg.el;
             const rawTitle = arg.event.title || '';
 
-            // 🎯 * から始まるタイトルなら赤背景クラスを付与
-            if (rawTitle.startsWith('*')) {
+            // 🎯 今日より前の過去予定かを判定
+            const now = new Date();
+            now.setHours(0, 0, 0, 0); // 本日の0時0分0秒
+
+            const eventTargetDate = arg.event.end ? new Date(arg.event.end) : new Date(arg.event.start);
+            if (arg.event.allDay && arg.event.end) {
+              // 終日予定の end は翌日0時を指すため1ミリ秒引いて比較
+              eventTargetDate.setTime(eventTargetDate.getTime() - 1);
+            }
+
+            if (eventTargetDate < now) {
+              el.classList.add('is-past');
+            } else if (rawTitle.startsWith('*')) {
+              // 今日以降の祝日のみ赤背景を適用
               el.classList.add('is-holiday');
             }
 
