@@ -25,6 +25,19 @@
         }
 
         /* -------------------------------------------------- */
+        /* 🎯 祝日スタイル（*から始まる予定）                   */
+        /* -------------------------------------------------- */
+        .fc-event.is-holiday {
+            background-color: #dc3545 !important; /* 赤色背景 */
+            border-color: #dc3545 !important;
+            color: #ffffff !important;
+        }
+        .fc-event.is-holiday .fc-event-text-block {
+            color: #ffffff !important;
+            font-weight: bold;
+        }
+
+        /* -------------------------------------------------- */
         /* 🎯 シームレス＆冒頭一時停止 弾幕専用スタイル      */
         /* -------------------------------------------------- */
         .fc-event {
@@ -268,8 +281,8 @@
         <h2>📅 予定を追加する</h2>
         
         <div class="form-group">
-            <label for="eventTitle">予定の名前</label>
-            <input type="text" id="eventTitle" placeholder="（例：夏合宿、実験A）">
+            <label for="eventTitle">予定の名前（※祝日は先頭に * を付ける）</label>
+            <input type="text" id="eventTitle" placeholder="（例：夏合宿、*秋分の日）">
         </div>
 
         <div class="form-group">
@@ -306,9 +319,10 @@
             <h3>📖 予定管理の使い方</h3>
             <ul>
                 <li><strong>予定の確認:</strong> カレンダー上で科学部の予定を確認できます。</li>
+                <li><strong>祝日の登録:</strong> 予定名の先頭に <code>*</code> を入力すると赤背景（祝日）として登録されます。</li>
                 <li><strong>予定の追加:</strong> フォームから「予定名」「期間」「時間」を設定して追加します。</li>
-                <li><strong>終日・時間設定:</strong> 終日チェックを外すと時間の入力が可能になります。</li>
                 <li><strong>予定の削除:</strong> カレンダー上の予定をクリックして削除します。</li>
+                <li><strong>読み込みの高速化:</strong> 端末のブラウザで通常のタブにて使用してください。およそ10秒短くなります。</li>
             </ul>
         </div>
     </div>
@@ -364,7 +378,6 @@
             console.warn(`通信試行 (${attempt}/${maxRetries}):`, err.message);
 
             if (attempt < maxRetries) {
-              // 🎯 サイレントリトライ（画面表示を出さずバックグラウンドで処理）
               await new Promise(res => setTimeout(res, 1000));
             } else {
               hideLoading();
@@ -439,7 +452,7 @@
             right: 'today'
           },
 
-          // 🎯 初期描画時は必ず「単一ブロック」のみを出力（重複の根絶）
+          // 🎯 初期描画（祝日判定 ＆ タイトル調整 ＆ 単一ブロック出力）
           eventContent: function(arg) {
             let nodes = [];
 
@@ -449,8 +462,12 @@
               nodes.push(dot);
             }
 
+            // タイトルが * から始まる場合は祝日としてテキストから * を取り除く
+            let rawTitle = arg.event.title || '';
+            let displayTitle = rawTitle.startsWith('*') ? rawTitle.slice(1) : rawTitle;
+
             let timeText = arg.timeText ? arg.timeText + ' ' : '';
-            let baseText = timeText + arg.event.title;
+            let baseText = timeText + displayTitle;
 
             let wrapper = document.createElement('div');
             wrapper.className = 'fc-event-scroll-wrapper';
@@ -458,7 +475,6 @@
             let content = document.createElement('div');
             content.className = 'fc-event-scroll-content';
 
-            // 初期レンダリングは1個のみ（全角スペースなし）
             let span1 = document.createElement('span');
             span1.className = 'fc-event-text-block';
             span1.innerText = baseText;
@@ -470,24 +486,29 @@
             return { domNodes: nodes };
           },
 
-          // 🎯 幅判定後に「はみ出している長文」の場合のみ2個目を動的生成・追加
+          // 🎯 幅判定 ＆ 祝日クラス（is-holiday）の動的付与
           eventDidMount: function(arg) {
+            const el = arg.el;
+            const rawTitle = arg.event.title || '';
+
+            // 🎯 * から始まるタイトルなら赤背景クラスを付与
+            if (rawTitle.startsWith('*')) {
+              el.classList.add('is-holiday');
+            }
+
             requestAnimationFrame(() => {
-              const el = arg.el;
               const wrapper = el.querySelector('.fc-event-scroll-wrapper');
               const content = el.querySelector('.fc-event-scroll-content');
               const firstBlock = el.querySelector('.fc-event-text-block');
               
               if (wrapper && firstBlock && content) {
-                // 1ブロックの文字列幅が表示領域（wrapper）を超えているか判定
                 if (firstBlock.offsetWidth > wrapper.clientWidth + 1) {
+                  let displayTitle = rawTitle.startsWith('*') ? rawTitle.slice(1) : rawTitle;
                   let timeText = arg.timeText ? arg.timeText + ' ' : '';
-                  let baseText = timeText + arg.event.title;
+                  let baseText = timeText + displayTitle;
 
-                  // 長文のみ：全角スペース2つを付与し、2個目の複製ブロックを挿入
                   firstBlock.innerText = baseText + '　　';
 
-                  // 既存の2個目があれば削除してから追加
                   const existingBlocks = content.querySelectorAll('.fc-event-text-block');
                   if (existingBlocks.length > 1) {
                     existingBlocks[1].remove();
@@ -500,7 +521,6 @@
 
                   el.classList.add('has-overflow');
                 } else {
-                  // 短文：アニメーションを解除し、ブロックは1つのまま固定
                   el.classList.remove('has-overflow');
                   const existingBlocks = content.querySelectorAll('.fc-event-text-block');
                   if (existingBlocks.length > 1) {
@@ -527,7 +547,6 @@
               if (Array.isArray(freshData)) {
                 localStorage.setItem(CACHE_KEY, JSON.stringify(freshData));
                 
-                // 初回のみ手動で描画、キャッシュがある場合は refetchEvents 側の安全な更新に任せる
                 if (!cachedData) {
                   successCallback(formatEvents(freshData));
                 }
@@ -540,7 +559,8 @@
           },
 
           eventClick: async function(info) {
-            if (confirm('「' + info.event.title + '」を削除しますか？')) {
+            let displayTitle = info.event.title.startsWith('*') ? info.event.title.slice(1) : info.event.title;
+            if (confirm('「' + displayTitle + '」を削除しますか？')) {
               showLoading('削除中…');
               try {
                 await fetchGasApi({
@@ -548,14 +568,12 @@
                   body: { action: 'delete', id: info.event.id }
                 });
 
-                // キャッシュを更新してカレンダーをクリーン再描画
                 const cachedData = localStorage.getItem(CACHE_KEY);
                 if (cachedData) {
                   const parsed = JSON.parse(cachedData).filter(item => String(item.id) !== String(info.event.id));
                   localStorage.setItem(CACHE_KEY, JSON.stringify(parsed));
                 }
 
-                // 🎯 一貫した安全な更新
                 calendar.refetchEvents();
 
               } catch (err) {
@@ -630,13 +648,11 @@
                 allDay: isAllDay
               };
 
-              // キャッシュを更新してカレンダーをクリーン再描画
               const cachedData = localStorage.getItem(CACHE_KEY);
               let currentCache = cachedData ? JSON.parse(cachedData) : [];
               currentCache.push(insertedItem.id ? insertedItem : createdEvent);
               localStorage.setItem(CACHE_KEY, JSON.stringify(currentCache));
 
-              // 🎯 差分競合を防ぐ単一更新手法
               calendar.refetchEvents();
 
               eventTitleInput.value = '';
