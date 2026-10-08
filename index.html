@@ -23,6 +23,27 @@
             box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
             min-height: 400px; 
         }
+
+        /* 🎯 長いタイトルがはみ出さず、枠内で横スクロールできるスタイル調整 */
+        .fc-event {
+            overflow-x: auto !important;
+            white-space: nowrap !important;
+            max-width: 100% !important;
+            -webkit-overflow-scrolling: touch; /* iPadでの滑らかなスクロール */
+        }
+        .fc-event-title-container, .fc-event-main {
+            overflow: hidden;
+            text-overflow: clip;
+        }
+        /* スクロールバーのデザイン（控えめにする） */
+        .fc-event::-webkit-scrollbar {
+            height: 2px;
+        }
+        .fc-event::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 2px;
+        }
+
         .form-container {
             max-width: 900px;
             margin: 20px auto;
@@ -246,6 +267,7 @@
     <script>
       const loadingOverlay = document.getElementById('loadingOverlay');
       const loadingText = document.getElementById('loadingText');
+      const CACHE_KEY = 'science_club_events_cache';
 
       function showLoading(msg = '処理中…') {
         loadingText.textContent = msg;
@@ -303,6 +325,18 @@
         }
       }
 
+      // データ配列を FullCalendar 形式に整形する共通関数
+      function formatEvents(data) {
+        if (!Array.isArray(data)) return [];
+        return data.map(event => ({
+          id: event.id,
+          title: event.title,
+          start: event.start,
+          end: event.end || null,
+          allDay: (event.all_day !== undefined) ? event.all_day : (event.allDay !== undefined ? event.allDay : true)
+        }));
+      }
+
       document.addEventListener('DOMContentLoaded', function() {
         const openHelpBtn = document.getElementById('openHelpBtn');
         const closeHelpBtn = document.getElementById('closeHelpBtn');
@@ -343,8 +377,6 @@
         var calendar = new FullCalendar.Calendar(calendarEl, {
           initialView: 'dayGridMonth',
           locale: 'ja',
-          
-          // 🎯 時間範囲表示の設定（「8:00 - 13:00」形式）
           displayEventEnd: true,
           eventTimeFormat: {
             hour: 'numeric',
@@ -358,25 +390,43 @@
             center: 'title',
             right: 'today'
           },
+
+          // ⚡ 高速キャッシュ付き取得イベント関数
           events: async function(fetchInfo, successCallback, failureCallback) {
+            // 1. まずローカル端末キャッシュを即座に適用（0秒表示）
+            const cachedData = localStorage.getItem(CACHE_KEY);
+            if (cachedData) {
+              try {
+                const parsedCache = JSON.parse(cachedData);
+                successCallback(formatEvents(parsedCache));
+              } catch (e) {
+                console.warn("キャッシュデータのパース失敗:", e);
+              }
+            }
+
+            // 2. バックグラウンドで最新データを通信取得してキャッシュ＆更新
             try {
-              const data = await fetchGasApi();
-              if (Array.isArray(data)) {
-                const events = data.map(event => ({
-                  id: event.id,
-                  title: event.title,
-                  start: event.start,
-                  end: event.end || null,
-                  allDay: (event.all_day !== undefined) ? event.all_day : (event.allDay !== undefined ? event.allDay : true)
-                }));
-                successCallback(events);
-              } else {
-                successCallback([]);
+              const freshData = await fetchGasApi();
+              if (Array.isArray(freshData)) {
+                // ローカルキャッシュの保存
+                localStorage.setItem(CACHE_KEY, JSON.stringify(freshData));
+                
+                // キャッシュがなかった場合は成功コールバックを発火
+                if (!cachedData) {
+                  successCallback(formatEvents(freshData));
+                } else {
+                  // キャッシュを表示済みでも、最新データで差分更新
+                  calendar.removeAllEvents();
+                  calendar.addEventSource(formatEvents(freshData));
+                }
               }
             } catch (err) {
-              failureCallback(err);
+              if (!cachedData) {
+                failureCallback(err);
+              }
             }
           },
+
           eventClick: async function(info) {
             if (confirm('「' + info.event.title + '」を削除しますか？')) {
               showLoading('削除中…');
@@ -387,6 +437,13 @@
                 });
 
                 info.event.remove();
+
+                // 削除時もローカルキャッシュを即時同期更新
+                const cachedData = localStorage.getItem(CACHE_KEY);
+                if (cachedData) {
+                  const parsed = JSON.parse(cachedData).filter(item => String(item.id) !== String(info.event.id));
+                  localStorage.setItem(CACHE_KEY, JSON.stringify(parsed));
+                }
               } catch (err) {
                 alert('削除に失敗しました');
               } finally {
@@ -432,32 +489,43 @@
             }
           }
 
+          const newEventPayload = {
+            title: title, 
+            start: startIso, 
+            end: endIso, 
+            all_day: isAllDay
+          };
+
           showLoading('追加中…');
           try {
             const res = await fetchGasApi({
               method: 'POST',
               body: {
                 action: 'insert',
-                data: [{
-                  title: title, 
-                  start: startIso, 
-                  end: endIso, 
-                  all_day: isAllDay
-                }]
+                data: [newEventPayload]
               }
             });
 
             if (res) {
               const insertedItem = Array.isArray(res) ? res[0] : res;
-              
-              calendar.addEvent({
+              const createdEvent = {
                 id: insertedItem.id || Date.now(),
                 title: title,
                 start: startIso,
                 end: endIso,
                 allDay: isAllDay
-              });
+              };
 
+              // カレンダー上に即時追加
+              calendar.addEvent(createdEvent);
+
+              // 追加時もローカルキャッシュを更新
+              const cachedData = localStorage.getItem(CACHE_KEY);
+              let currentCache = cachedData ? JSON.parse(cachedData) : [];
+              currentCache.push(insertedItem.id ? insertedItem : createdEvent);
+              localStorage.setItem(CACHE_KEY, JSON.stringify(currentCache));
+
+              // フォームクリア
               eventTitleInput.value = '';
               eventStartDate.value = '';
               eventEndDate.value = '';
