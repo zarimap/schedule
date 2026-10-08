@@ -24,45 +24,61 @@
             min-height: 400px; 
         }
 
-        /* 🎯 弾幕風（マーキー）アニメーション設定 */
+        /* -------------------------------------------------- */
+        /* 🎯 弾幕アニメーション・枠内オーバーフロー専用スタイル */
+        /* -------------------------------------------------- */
         .fc-event {
             overflow: hidden !important;
             white-space: nowrap !important;
             max-width: 100% !important;
         }
 
-        /* イベント内のメイン要素・タイトルコンテナ */
-        .fc-event-main, .fc-event-title-container {
-            display: inline-block !important;
+        /* イベント内部コンテナ */
+        .fc-event-main {
             overflow: hidden !important;
             white-space: nowrap !important;
+            display: flex !important;
+            align-items: center;
             width: 100%;
         }
 
-        /* アニメーション用クラス */
-        .fc-event-title, .fc-event-main-frame {
-            display: inline-block !important;
-            white-space: nowrap !important;
-            padding-left: 100%; /* 開始位置を右端枠外に */
-            animation: danmaku-scroll 10s linear infinite; /* 10秒でループ */
+        /* 時間指定イベントのDot（青丸）枠 */
+        .fc-daygrid-event-dot {
+            flex-shrink: 0;
+            margin-right: 4px;
         }
 
-        /* ホバーまたはタップ時に流れるのを一時停止（読みやすくするため） */
-        .fc-event:hover .fc-event-title,
-        .fc-event:hover .fc-event-main-frame {
+        /* スクロール対象のラッパー（枠の左端から開始） */
+        .fc-event-scroll-content {
+            display: inline-block;
+            white-space: nowrap;
+            will-change: transform;
+        }
+
+        /* はみ出ている要素（.has-overflow）のみ弾幕スクロールを発動 */
+        .fc-event.has-overflow .fc-event-scroll-content {
+            padding-right: 40px; /* ループ時の余白 */
+            animation: danmaku-left-start 8s linear infinite;
+        }
+
+        /* タップ・ホバー時にアニメーションを一時停止 */
+        .fc-event:hover .fc-event-scroll-content {
             animation-play-state: paused;
         }
 
-        /* 弾幕スクロールアニメーションキーフレーム */
-        @keyframes danmaku-scroll {
+        /* 左端（0%）から開始し、全文字分＋余白を左へ流すキーフレーム */
+        @keyframes danmaku-left-start {
             0% {
-                transform: translateX(0);
+                transform: translateX(0%);
             }
             100% {
                 transform: translateX(-100%);
             }
         }
 
+        /* -------------------------------------------------- */
+        /* フォーム & モーダル UI スタイル                    */
+        /* -------------------------------------------------- */
         .form-container {
             max-width: 900px;
             margin: 20px auto;
@@ -407,6 +423,32 @@
             left: 'prev,next',
             center: 'title',
             right: 'today'
+          },
+
+          // 🎯 カスタムイベント描画（時間＋タイトルを構造化して一体化）
+          eventContent: function(arg) {
+            let timeText = arg.timeText ? arg.timeText + ' ' : '';
+            let fullText = timeText + arg.event.title;
+
+            let container = document.createElement('div');
+            container.className = 'fc-event-scroll-content';
+            container.innerText = fullText;
+
+            return { domNodes: [container] };
+          },
+
+          // 🎯 要素描画完了時に枠幅を超えているか判定してアニメーションを適用
+          eventDidMount: function(arg) {
+            requestAnimationFrame(() => {
+              const el = arg.el;
+              const contentEl = el.querySelector('.fc-event-scroll-content');
+              if (contentEl) {
+                // コンテンツ幅が表示枠幅より大きい場合のみクラス付与
+                if (contentEl.scrollWidth > el.clientWidth) {
+                  el.classList.add('has-overflow');
+                }
+              }
+            });
           },
 
           events: async function(fetchInfo, successCallback, failureCallback) {
