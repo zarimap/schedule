@@ -239,7 +239,6 @@ function escapeHtml(str) {
   );
 }
 
-// 正規表現用エスケープ関数
 function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -372,24 +371,57 @@ document.addEventListener('DOMContentLoaded', function() {
     chatNameInput.value = savedName;
   }
 
-  // 🔔 新着メンションのチェック処理（厳密なスペース・改行区切り対応）
+  // 🔔 新着メンションのチェック処理（厳密な境界判定 ＆ チャットキャッシュ基準）
   async function checkNewMentionsOnStartup() {
     if (hasCheckedMention) return;
     const myName = (chatNameInput.value || localStorage.getItem('science_club_chat_name') || '').trim();
-    if (!myName) return; // 名前が未設定なら判定しない
+    if (!myName) return;
 
     try {
+      // サーバーから最新のメッセージを取得
       const rawData = await fetchGasApi({ url: `${GAS_WEB_APP_URL}?action=getChat` });
       if (!Array.isArray(rawData) || rawData.length === 0) return;
 
-      const lastReadTime = localStorage.getItem('science_club_last_read_time');
-      const lastReadDate = lastReadTime ? new Date(lastReadTime) : new Date(0);
+      const validMessages = rawData.filter(msg => msg && msg.message && typeof msg.message === 'string' && msg.message.trim() !== '');
+      if (validMessages.length === 0) return;
 
-      // 「@自分の名前」の後ろに半角スペース、全角スペース、改行、または文末が来るパターンを正規表現で正確に判定
-      const mentionRegex = new RegExp(`@${escapeRegExp(myName)}(?=[\\s　]|$)`, 'u');
+      // チャットのローカルストレージ（キャッシュ）から前回の既読時刻をスマートに特定
+      // （キャッシュがなければ、最新以外の直近メッセージを基準にするか、初回は通知しない）
+      const cachedChat = localStorage.getItem(CHAT_CACHE_KEY);
+      let lastReadDate = new Date(0);
 
-      const unreadMentions = rawData.filter(msg => {
-        if (!msg || !msg.message || !msg.created_at) return false;
+      if (cachedChat) {
+        try {
+          const parsedCache = JSON.parse(cachedChat);
+          if (parsedCache.length > 0) {
+            // キャッシュ内の最後のメッセージの作成時刻を前回の確認基準とする
+            const lastCachedMsg = parsedCache[parsedCache.length - 1];
+            if (lastCachedMsg && lastCachedMsg.created_at) {
+              lastReadDate = new Date(lastCachedMsg.created_at);
+            }
+          }
+        } catch (e) {
+          console.warn("キャッシュ解析エラー:", e);
+        }
+      } else {
+        // 初回起動時は現在の最新メッセージ時刻を既読基準にして、過去の未読で暴発しないようにする
+        const latestMsg = validMessages[validMessages.length - 1];
+        if (latestMsg && latestMsg.created_at) {
+          localStorage.setItem(CHAT_CACHE_KEY, JSON.stringify(validMessages));
+          return;
+        }
+      }
+
+      // キャッシュを最新に更新
+      localStorage.setItem(CHAT_CACHE_KEY, JSON.stringify(validMessages));
+
+      // 🔴 メンションの正規表現：@自分の名前 の直後に英字・数字・日本語文字が「続いていない」ことを強制する
+      // （例：「大橋」のあとに「dev」が続く「@大橋dev」には反応せず、完全一致またはスペース・記号・文末で区切られる場合のみヒット）
+      const escapedName = escapeRegExp(myName);
+      const mentionRegex = new RegExp(`@${escapedName}(?![a-zA-Z0-9ぁ-んァ-ン一-龥ａ-ｚＡ-Z０-９])`, 'u');
+
+      const unreadMentions = validMessages.filter(msg => {
+        if (!msg.created_at) return false;
         const msgDate = new Date(msg.created_at);
         const isNew = msgDate > lastReadDate;
         const isOther = (msg.name !== myName);
@@ -408,13 +440,26 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // ページ読み込み時に一度メンションチェックを実行
+  // ページ読み込み時に一度チェック実行
   setTimeout(checkNewMentionsOnStartup, 1000);
 
-  // メンションポップアップを閉じる処理
+  // ポップアップを閉じる（チャットキャッシュの最新時刻に同期させる）
   function closeMentionPopup() {
     mentionModal.style.display = 'none';
-    localStorage.setItem('science_club_last_read_time', new Date().toISOString());
+    syncCacheToLatest();
+  }
+
+  // チャットのキャッシュを最新の状態に同期して既読完了とする関数
+  async function syncCacheToLatest() {
+    try {
+      const rawData = await fetchGasApi({ url: `${GAS_WEB_APP_URL}?action=getChat` });
+      if (Array.isArray(rawData)) {
+        const validMessages = rawData.filter(msg => msg && msg.message && typeof msg.message === 'string' && msg.message.trim() !== '');
+        localStorage.setItem(CHAT_CACHE_KEY, JSON.stringify(validMessages));
+      }
+    } catch (e) {
+      console.warn("キャッシュ同期失敗:", e);
+    }
   }
 
   closeMentionModal.addEventListener('click', closeMentionPopup);
@@ -422,7 +467,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (e.target === mentionModal) closeMentionPopup();
   });
 
-  // 「チャットを開く」ボタン（メンションポップアップ内）
   openChatFromMentionBtn.addEventListener('click', () => {
     closeMentionPopup();
     openChatModal();
@@ -501,7 +545,7 @@ document.addEventListener('DOMContentLoaded', function() {
   function openChatModal() {
     chatModalOverlay.style.display = 'flex';
     loadChatMessages(true);
-    localStorage.setItem('science_club_last_read_time', new Date().toISOString());
+    syncCacheToLatest(); // チャットを開いたら既読（最新に同期）にする
     if (!chatInterval) {
       chatInterval = setInterval(() => loadChatMessages(false), 5000);
     }
@@ -511,7 +555,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function closeChatModal() {
     chatModalOverlay.style.display = 'none';
-    localStorage.setItem('science_club_last_read_time', new Date().toISOString());
+    syncCacheToLatest(); // チャットを閉じたら既読（最新に同期）にする
     if (chatInterval) {
       clearInterval(chatInterval);
       chatInterval = null;
@@ -548,6 +592,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
       chatTextInput.value = '';
       await loadChatMessages(true);
+      syncCacheToLatest();
     } catch (err) {
       alert('メッセージの送信に失敗しました');
     } finally {
