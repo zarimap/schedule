@@ -347,22 +347,17 @@ h1 { margin: 0; font-size: 1.5rem; }
     white-space: nowrap;
     flex-shrink: 0;
 }
-
-/* 重要なお知らせ専用の低速弾幕アニメーション（15秒・冒頭2秒停止） */
 .importance-card.has-overflow .importance-scroll-content {
     animation: importance-danmaku-slow 15s linear infinite;
 }
-
 .importance-card:hover .importance-scroll-content {
     animation-play-state: paused;
 }
-
 @keyframes importance-danmaku-slow {
     0% { transform: translateX(0%); }
-    12% { transform: translateX(0%); } /* 冒頭約2秒間停止 */
+    12% { transform: translateX(0%); }
     100% { transform: translateX(-50%); }
 }
-
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(-4px); }
     to { opacity: 1; transform: translateY(0); }
@@ -566,7 +561,22 @@ h1 { margin: 0; font-size: 1.5rem; }
     gap: 8px;
 }
 .chat-name-input { width: 130px; height: 38px; font-size: 14px; padding: 0 8px; border: 1px solid #ccc; border-radius: 6px; }
-.chat-text-input { flex-grow: 1; height: 38px; font-size: 14px; padding: 0 10px; border: 1px solid #ccc; border-radius: 6px; }
+
+/* ✏️ textarea 向けチャット入力欄スタイル */
+.chat-text-input { 
+    flex-grow: 1; 
+    height: 42px; 
+    min-height: 38px;
+    max-height: 100px;
+    font-size: 14px; 
+    padding: 8px 10px; 
+    border: 1px solid #ccc; 
+    border-radius: 6px; 
+    resize: none; 
+    font-family: inherit;
+    line-height: 1.4;
+}
+
 .chat-send-btn {
     background-color: #007bff;
     color: white;

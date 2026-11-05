@@ -353,12 +353,75 @@ document.addEventListener('DOMContentLoaded', function() {
   const chatTextInput = document.getElementById('chatTextInput');
   const chatSendBtn = document.getElementById('chatSendBtn');
 
+  // 🔔 メンションポップアップ関連の要素
+  const mentionModal = document.getElementById('mentionModal');
+  const closeMentionModal = document.getElementById('closeMentionModal');
+  const openChatFromMentionBtn = document.getElementById('openChatFromMentionBtn');
+  const mentionPopupText = document.getElementById('mentionPopupText');
+
   let chatInterval = null;
+  let hasCheckedMention = false; // 起動時に一度だけチェックするフラグ
 
   const savedName = localStorage.getItem('science_club_chat_name');
   if (savedName) {
     chatNameInput.value = savedName;
   }
+
+  // 🔔 新着メンションのチェック処理
+  async function checkNewMentionsOnStartup() {
+    if (hasCheckedMention) return;
+    const myName = (chatNameInput.value || localStorage.getItem('science_club_chat_name') || '').trim();
+    if (!myName) return; // 名前が未設定ならメンション判定できないのでスキップ
+
+    try {
+      const rawData = await fetchGasApi({ url: `${GAS_WEB_APP_URL}?action=getChat` });
+      if (!Array.isArray(rawData) || rawData.length === 0) return;
+
+      const lastReadTime = localStorage.getItem('science_club_last_read_time');
+      const lastReadDate = lastReadTime ? new Date(lastReadTime) : new Date(0);
+
+      // 前回既読時刻以降に届いた、自分宛て（@自分の名前）のメッセージを抽出
+      const unreadMentions = rawData.filter(msg => {
+        if (!msg || !msg.message || !msg.created_at) return false;
+        const msgDate = new Date(msg.created_at);
+        // 他人の発言で、かつ前回確認時刻より新しく、本文に "@自分の名前" が含まれているか
+        const isNew = msgDate > lastReadDate;
+        const isOther = (msg.name !== myName);
+        const hasMention = msg.message.includes(`@${myName}`);
+        return isNew && isOther && hasMention;
+      });
+
+      if (unreadMentions.length > 0) {
+        hasCheckedMention = true;
+        // 最新のメンションを表示
+        const latest = unreadMentions[unreadMentions.length - 1];
+        mentionPopupText.innerHTML = `<strong>${escapeHtml(latest.name)}</strong>さんからのメンション:<br>「${escapeHtml(latest.message)}」`;
+        mentionModal.style.display = 'flex';
+      }
+    } catch (err) {
+      console.warn("メンションチェック失敗:", err);
+    }
+  }
+
+  // ページ読み込み時に一度メンションチェックを実行
+  setTimeout(checkNewMentionsOnStartup, 1000);
+
+  // メンションポップアップを閉じる処理
+  function closeMentionPopup() {
+    mentionModal.style.display = 'none';
+    localStorage.setItem('science_club_last_read_time', new Date().toISOString());
+  }
+
+  closeMentionModal.addEventListener('click', closeMentionPopup);
+  mentionModal.addEventListener('click', (e) => {
+    if (e.target === mentionModal) closeMentionPopup();
+  });
+
+  // 「チャットを開く」ボタン（メンションポップアップ内）
+  openChatFromMentionBtn.addEventListener('click', () => {
+    closeMentionPopup();
+    openChatModal();
+  });
 
   async function loadChatMessages(scrollToBottom = false) {
     const cachedChat = localStorage.getItem(CHAT_CACHE_KEY);
@@ -430,16 +493,20 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  openChatBtn.addEventListener('click', () => {
+  function openChatModal() {
     chatModalOverlay.style.display = 'flex';
     loadChatMessages(true);
+    localStorage.setItem('science_club_last_read_time', new Date().toISOString());
     if (!chatInterval) {
       chatInterval = setInterval(() => loadChatMessages(false), 5000);
     }
-  });
+  }
+
+  openChatBtn.addEventListener('click', openChatModal);
 
   function closeChatModal() {
     chatModalOverlay.style.display = 'none';
+    localStorage.setItem('science_club_last_read_time', new Date().toISOString());
     if (chatInterval) {
       clearInterval(chatInterval);
       chatInterval = null;
@@ -457,7 +524,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (!message) return;
 
-    // 🔴 ここで filter.js の関数を呼び出してNGワードを置換します
+    // 🔴 filter.js の関数を呼び出してNGワードを置換
     message = filterChatText(message);
 
     localStorage.setItem('science_club_chat_name', name);
@@ -486,8 +553,10 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   chatSendBtn.addEventListener('click', sendChatMessage);
-  chatTextInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
+
+  // ⌨️ Shift + Enterで改行、Enterのみで送信
+  chatTextInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendChatMessage();
     }
@@ -813,7 +882,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     eventClick: async function(info) {
       let displayTitle = info.event.title.startsWith('*') ? info.event.title.slice(1) : info.event.title;
-      if (confirm('「' + displayTitle + '」を削除しますか？')) {
+      if (confirm('応援：「' + displayTitle + '」を削除しますか？')) {
         showLoading('削除中…');
         try {
           await fetchGasApi({

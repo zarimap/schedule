@@ -177,10 +177,22 @@
                     <input type="text" id="chatNameInput" class="chat-name-input" placeholder="名前（例: 太郎）">
                 </div>
                 <div class="chat-input-row">
-                    <input type="text" id="chatTextInput" class="chat-text-input" placeholder="メッセージを入力...">
+                    <textarea id="chatTextInput" class="chat-text-input" placeholder="メッセージを入力... (Shift+Enterで改行)"></textarea>
                     <button class="chat-send-btn" id="chatSendBtn">送信</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- 🔔 新着メンション通知ポップアップ -->
+    <div class="modal-overlay" id="mentionModal">
+        <div class="modal-content" style="text-align: center; max-width: 400px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3 style="margin: 0; color: #007bff;">🔔 新着のメンションがあります</h3>
+                <button class="modal-close-btn" id="closeMentionModal">&times;</button>
+            </div>
+            <div id="mentionPopupText" style="margin-bottom: 20px; color: #333; line-height: 1.5; text-align: left; background: #f8f9fa; padding: 12px; border-radius: 8px; font-size: 0.95rem; word-break: break-all; max-height: 150px; overflow-y: auto;"></div>
+            <button class="submit-btn" id="openChatFromMentionBtn">チャットを開く</button>
         </div>
     </div>
 
@@ -197,6 +209,7 @@
                 <li><strong>過去の予定:</strong> 既に終了した過去の予定は自動的にグレーアウト表示されます。</li>
                 <li><strong>予定の追加:</strong> フォームから「予定名」「期間」「時間」を設定して追加します。</li>
                 <li><strong>予定の削除:</strong> カレンダー上の予定をクリックして削除します。</li>
+                <li><strong>メンション機能:</strong> チャット内で <code>@名前</code> と入力すると相手に通知できます。</li>
             </ul>
         </div>
     </div>
