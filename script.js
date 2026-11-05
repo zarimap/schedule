@@ -371,22 +371,20 @@ document.addEventListener('DOMContentLoaded', function() {
     chatNameInput.value = savedName;
   }
 
-  // 🔔 新着メンションのチェック処理（厳密な境界判定 ＆ チャットキャッシュ基準）
+  // 🔔 新着メンションのチェック処理（チャットキャッシュの最後尾時刻を既読基準にする）
   async function checkNewMentionsOnStartup() {
     if (hasCheckedMention) return;
     const myName = (chatNameInput.value || localStorage.getItem('science_club_chat_name') || '').trim();
     if (!myName) return;
 
     try {
-      // サーバーから最新のメッセージを取得
       const rawData = await fetchGasApi({ url: `${GAS_WEB_APP_URL}?action=getChat` });
       if (!Array.isArray(rawData) || rawData.length === 0) return;
 
       const validMessages = rawData.filter(msg => msg && msg.message && typeof msg.message === 'string' && msg.message.trim() !== '');
       if (validMessages.length === 0) return;
 
-      // チャットのローカルストレージ（キャッシュ）から前回の既読時刻をスマートに特定
-      // （キャッシュがなければ、最新以外の直近メッセージを基準にするか、初回は通知しない）
+      // チャットキャッシュから「前回の最後のメッセージ時刻」を読み込む
       const cachedChat = localStorage.getItem(CHAT_CACHE_KEY);
       let lastReadDate = new Date(0);
 
@@ -394,7 +392,6 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
           const parsedCache = JSON.parse(cachedChat);
           if (parsedCache.length > 0) {
-            // キャッシュ内の最後のメッセージの作成時刻を前回の確認基準とする
             const lastCachedMsg = parsedCache[parsedCache.length - 1];
             if (lastCachedMsg && lastCachedMsg.created_at) {
               lastReadDate = new Date(lastCachedMsg.created_at);
@@ -404,19 +401,12 @@ document.addEventListener('DOMContentLoaded', function() {
           console.warn("キャッシュ解析エラー:", e);
         }
       } else {
-        // 初回起動時は現在の最新メッセージ時刻を既読基準にして、過去の未読で暴発しないようにする
-        const latestMsg = validMessages[validMessages.length - 1];
-        if (latestMsg && latestMsg.created_at) {
-          localStorage.setItem(CHAT_CACHE_KEY, JSON.stringify(validMessages));
-          return;
-        }
+        // 初回は過去ログのメンションで暴発しないよう、現在の最新メッセージを基準にしてキャッシュ保存
+        localStorage.setItem(CHAT_CACHE_KEY, JSON.stringify(validMessages));
+        return;
       }
 
-      // キャッシュを最新に更新
-      localStorage.setItem(CHAT_CACHE_KEY, JSON.stringify(validMessages));
-
-      // 🔴 メンションの正規表現：@自分の名前 の直後に英字・数字・日本語文字が「続いていない」ことを強制する
-      // （例：「大橋」のあとに「dev」が続く「@大橋dev」には反応せず、完全一致またはスペース・記号・文末で区切られる場合のみヒット）
+      // 🔴 厳密なメンション判定（@名前 の後ろに文字が続いていないか）
       const escapedName = escapeRegExp(myName);
       const mentionRegex = new RegExp(`@${escapedName}(?![a-zA-Z0-9ぁ-んァ-ン一-龥ａ-ｚＡ-Z０-９])`, 'u');
 
@@ -443,13 +433,13 @@ document.addEventListener('DOMContentLoaded', function() {
   // ページ読み込み時に一度チェック実行
   setTimeout(checkNewMentionsOnStartup, 1000);
 
-  // ポップアップを閉じる（チャットキャッシュの最新時刻に同期させる）
+  // ポップアップを閉じる（チャットの最新キャッシュを既読として同期）
   function closeMentionPopup() {
     mentionModal.style.display = 'none';
     syncCacheToLatest();
   }
 
-  // チャットのキャッシュを最新の状態に同期して既読完了とする関数
+  // チャットのキャッシュを最新の状態に更新する関数
   async function syncCacheToLatest() {
     try {
       const rawData = await fetchGasApi({ url: `${GAS_WEB_APP_URL}?action=getChat` });
@@ -545,7 +535,7 @@ document.addEventListener('DOMContentLoaded', function() {
   function openChatModal() {
     chatModalOverlay.style.display = 'flex';
     loadChatMessages(true);
-    syncCacheToLatest(); // チャットを開いたら既読（最新に同期）にする
+    syncCacheToLatest(); // チャットを開いたら既読化
     if (!chatInterval) {
       chatInterval = setInterval(() => loadChatMessages(false), 5000);
     }
@@ -555,7 +545,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function closeChatModal() {
     chatModalOverlay.style.display = 'none';
-    syncCacheToLatest(); // チャットを閉じたら既読（最新に同期）にする
+    syncCacheToLatest(); // チャットを閉じたら既読化
     if (chatInterval) {
       clearInterval(chatInterval);
       chatInterval = null;
@@ -573,7 +563,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (!message) return;
 
-    // 🔴 filter.js の関数を呼び出してNGワードを置換
+    // 🔴 NGワードフィルタ適用
     message = filterChatText(message);
 
     localStorage.setItem('science_club_chat_name', name);
