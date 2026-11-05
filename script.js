@@ -239,6 +239,11 @@ function escapeHtml(str) {
   );
 }
 
+// 正規表現用エスケープ関数
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // ☀️ 天気予報API連携処理（気象庁予報）
 let jmaForecastCache = null;
 
@@ -360,18 +365,18 @@ document.addEventListener('DOMContentLoaded', function() {
   const mentionPopupText = document.getElementById('mentionPopupText');
 
   let chatInterval = null;
-  let hasCheckedMention = false; // 起動時に一度だけチェックするフラグ
+  let hasCheckedMention = false;
 
   const savedName = localStorage.getItem('science_club_chat_name');
   if (savedName) {
     chatNameInput.value = savedName;
   }
 
-  // 🔔 新着メンションのチェック処理
+  // 🔔 新着メンションのチェック処理（厳密なスペース・改行区切り対応）
   async function checkNewMentionsOnStartup() {
     if (hasCheckedMention) return;
     const myName = (chatNameInput.value || localStorage.getItem('science_club_chat_name') || '').trim();
-    if (!myName) return; // 名前が未設定ならメンション判定できないのでスキップ
+    if (!myName) return; // 名前が未設定なら判定しない
 
     try {
       const rawData = await fetchGasApi({ url: `${GAS_WEB_APP_URL}?action=getChat` });
@@ -380,20 +385,20 @@ document.addEventListener('DOMContentLoaded', function() {
       const lastReadTime = localStorage.getItem('science_club_last_read_time');
       const lastReadDate = lastReadTime ? new Date(lastReadTime) : new Date(0);
 
-      // 前回既読時刻以降に届いた、自分宛て（@自分の名前）のメッセージを抽出
+      // 「@自分の名前」の後ろに半角スペース、全角スペース、改行、または文末が来るパターンを正規表現で正確に判定
+      const mentionRegex = new RegExp(`@${escapeRegExp(myName)}(?=[\\s　]|$)`, 'u');
+
       const unreadMentions = rawData.filter(msg => {
         if (!msg || !msg.message || !msg.created_at) return false;
         const msgDate = new Date(msg.created_at);
-        // 他人の発言で、かつ前回確認時刻より新しく、本文に "@自分の名前" が含まれているか
         const isNew = msgDate > lastReadDate;
         const isOther = (msg.name !== myName);
-        const hasMention = msg.message.includes(`@${myName}`);
+        const hasMention = mentionRegex.test(msg.message);
         return isNew && isOther && hasMention;
       });
 
       if (unreadMentions.length > 0) {
         hasCheckedMention = true;
-        // 最新のメンションを表示
         const latest = unreadMentions[unreadMentions.length - 1];
         mentionPopupText.innerHTML = `<strong>${escapeHtml(latest.name)}</strong>さんからのメンション:<br>「${escapeHtml(latest.message)}」`;
         mentionModal.style.display = 'flex';
@@ -882,7 +887,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     eventClick: async function(info) {
       let displayTitle = info.event.title.startsWith('*') ? info.event.title.slice(1) : info.event.title;
-      if (confirm('応援：「' + displayTitle + '」を削除しますか？')) {
+      if (confirm('「' + displayTitle + '」を削除しますか？')) {
         showLoading('削除中…');
         try {
           await fetchGasApi({
