@@ -33,6 +33,9 @@
             <button class="nav-tab" data-target="earthquake-pane" title="地震">
                 <span class="nav-icon">🌋</span>
                 <span class="nav-label">地震</span>
+            <button class="nav-tab" data-target="drive-pane" title="Drive">
+                <span class="nav-icon">📁</span>
+                <span class="nav-label">Drive</span>
             </button>
             <button class="nav-tab" data-target="weather-pane" title="天気">
                 <span class="nav-icon">☀️</span>
@@ -119,6 +122,11 @@
             <!-- 地震タブ（iframe埋め込み：Wolfx WebSocket連携ページ） -->
             <div class="tab-pane" id="earthquake-pane">
                 <iframe src="https://maps.zaritsuri.com/test/index.html" class="full-iframe" allowfullscreen></iframe>
+            </div>
+
+            <!-- ドライブタブ（iframe埋め込み：Wolfx WebSocket連携ページ） -->
+            <div class="tab-pane" id="drive-pane">
+                <iframe src="https://script.google.com/macros/s/AKfycbyUfFWD0YhcATtz3hXMBq6ksLSmnQ3gYJd_mDDiF-w9BOEGXUekHrVBP_EiBc378uSJWw/exec" class="full-iframe" allowfullscreen></iframe>
             </div>
 
             <!-- 天気タブ -->
