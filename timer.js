@@ -5,20 +5,27 @@ document.addEventListener('DOMContentLoaded', function() {
     const startBtn = document.getElementById('timerStartBtn');
     const stopBtn = document.getElementById('timerStopBtn');
     const resetBtn = document.getElementById('timerResetBtn');
+    const timerSoundStatusText = document.getElementById('timerSoundStatusText');
 
     if (!display) return;
 
     let totalSeconds = 180;
     let timerId = null;
     let isRunning = false;
-    let timerSound = new Audio('./sound.mp4');
+    
+    let timerSound = new Audio('./sound.mp3');
+    timerSound.onerror = () => {
+        timerSound.src = './sound.mp4';
+    };
 
-    // 🔄 タイマーでもIndexedDBからカスタム音声をロード
     async function loadTimerAudio() {
         try {
             const file = await getCustomAudioFromDB();
             if (file) {
                 timerSound.src = URL.createObjectURL(file);
+                if (timerSoundStatusText) timerSoundStatusText.textContent = '🎵 カスタム音声が適用されています';
+            } else {
+                if (timerSoundStatusText) timerSoundStatusText.textContent = '🎵 デフォルト音（sound.mp3 / sound.mp4）が適用されています';
             }
         } catch (e) {
             console.warn("タイマー音声ロード失敗:", e);
@@ -49,7 +56,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         let html = '';
-        timerHistory.forEach((item, idx) => {
+        timerHistory.forEach((item) => {
             html += `<button class="timer-history-chip" data-min="${item.m}" data-sec="${item.s}" style="padding: 4px 10px; background: #f1f3f5; border: 1px solid #ced4da; border-radius: 15px; font-size: 0.85rem; cursor: pointer; color: #333;">${item.label}</button>`;
         });
         historyContainer.innerHTML = html;
@@ -98,15 +105,21 @@ document.addEventListener('DOMContentLoaded', function() {
         stopBtn.style.display = 'inline-block';
 
         timerId = setInterval(() => {
-            totalSeconds--;
+            if (totalSeconds > 0) {
+                totalSeconds--;
+            }
             updateDisplay();
+
+            // 00:00 に到達した瞬間の処理
             if (totalSeconds <= 0) {
                 clearInterval(timerId);
                 isRunning = false;
                 
                 timerSound.currentTime = 0;
-                timerSound.play().catch(e => console.warn("音声再生エラー:", e));
+                timerSound.play().catch(e => console.warn("タイマー音声再生エラー:", e));
+                
                 alert('⏲️ タイマー終了です！');
+                
                 timerSound.pause();
                 timerSound.currentTime = 0;
 
