@@ -316,7 +316,7 @@ document.addEventListener('DOMContentLoaded', function() {
   loadInfoContent();
   loadImportance();
 
-    // --- 🧭 タブ切り替えロジック ---
+  // --- 🧭 タブ切り替えロジック ---
   const navTabs = document.querySelectorAll('.nav-tab');
   const subNavTabs = document.querySelectorAll('.sub-nav-tab');
   const tabPanes = document.querySelectorAll('.tab-pane');
@@ -326,22 +326,14 @@ document.addEventListener('DOMContentLoaded', function() {
     tab.addEventListener('click', (e) => {
       const targetId = tab.getAttribute('data-target');
 
-      // 「時間」親タブがクリックされた場合
-      if (targetId === 'time-menu') {
-        e.preventDefault();
-        if (timeNavWrapper) {
-          timeNavWrapper.classList.toggle('active-popup');
-        }
-        return;
-      } else {
-        if (timeNavWrapper) {
-          timeNavWrapper.classList.remove('active-popup');
-        }
-      }
-
       navTabs.forEach(t => t.classList.remove('active'));
       subNavTabs.forEach(st => st.classList.remove('active'));
       tab.classList.add('active');
+
+      if (tab.closest('#timeNavWrapper')) {
+        const defaultSub = document.querySelector('.sub-nav-tab[data-target="alarm-pane"]');
+        if (defaultSub) defaultSub.classList.add('active');
+      }
 
       tabPanes.forEach(pane => {
         pane.classList.remove('active');
@@ -363,14 +355,13 @@ document.addEventListener('DOMContentLoaded', function() {
   // --- ⏱️ サブメニュー（時間タブ内）のタブ切り替えロジック ---
   subNavTabs.forEach(subTab => {
     subTab.addEventListener('click', (e) => {
-      e.stopPropagation(); // 親へのイベント伝播を防止
+      e.stopPropagation();
       const targetId = subTab.getAttribute('data-target');
 
       navTabs.forEach(t => t.classList.remove('active'));
       subNavTabs.forEach(st => st.classList.remove('active'));
 
-      // 「時間」親タブと選択されたサブタブをアクティブに
-      const timeTabBtn = document.querySelector('[data-target="time-menu"]');
+      const timeTabBtn = document.querySelector('#timeNavWrapper .nav-tab');
       if (timeTabBtn) timeTabBtn.classList.add('active');
       subTab.classList.add('active');
 
@@ -417,7 +408,7 @@ document.addEventListener('DOMContentLoaded', function() {
     chatNameInput.value = savedName;
   }
 
-  // 🔔 新着メンション（個人 ＆ @all）のチェック処理（安全な正規表現）
+  // 🔔 新着メンション（個人 ＆ @all）のチェック処理
   async function checkNewMentionsOnStartup() {
     if (hasCheckedMention || !chatNameInput) return;
     const myName = (chatNameInput.value || localStorage.getItem('science_club_chat_name') || '').trim();
@@ -451,7 +442,6 @@ document.addEventListener('DOMContentLoaded', function() {
       }
 
       const escapedName = escapeRegExp(myName);
-      // uフラグや複雑な否定先読みを避け、安全な正規表現に変更
       const myNameRegex = new RegExp(`@${escapedName}(\\s|$)`);
       const allMentionRegex = /@all(\s|$)/i;
 
