@@ -316,7 +316,7 @@ document.addEventListener('DOMContentLoaded', function() {
   loadInfoContent();
   loadImportance();
 
-  // --- 🧭 タブ切り替えロジック ---
+  // --- 🧭タブ切り替えロジック ---
   const navTabs = document.querySelectorAll('.nav-tab');
   const tabPanes = document.querySelectorAll('.tab-pane');
 
@@ -374,7 +374,7 @@ document.addEventListener('DOMContentLoaded', function() {
     chatNameInput.value = savedName;
   }
 
-  // 🔔 新着メンション（個人 ＆ @all）のチェック処理
+  // 🔔 新着メンション（個人 ＆ @all）のチェック処理（安全な正規表現）
   async function checkNewMentionsOnStartup() {
     if (hasCheckedMention || !chatNameInput) return;
     const myName = (chatNameInput.value || localStorage.getItem('science_club_chat_name') || '').trim();
@@ -408,8 +408,9 @@ document.addEventListener('DOMContentLoaded', function() {
       }
 
       const escapedName = escapeRegExp(myName);
-      const myNameRegex = new RegExp(`@${escapedName}(?![a-zA-Z0-9ぁ-んァ-ン一-龥ａ-ｚＡ-Z０-９])`, 'u');
-      const allMentionRegex = /@all(?![a-zA-Z0-9ぁ-んァ-ン一-龥ａ-ｚＡ-Z０-９])/iu;
+      // uフラグや複雑な否定先読みを避け、安全な正規表現に変更
+      const myNameRegex = new RegExp(`@${escapedName}(\\s|$)`);
+      const allMentionRegex = /@all(\s|$)/i;
 
       const unreadMentions = validMessages.filter(msg => {
         if (!msg.created_at) return false;
@@ -616,7 +617,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (!message) return;
 
-    // NGワードフィルターの安全な適用
     if (typeof filterChatText === 'function') {
       message = filterChatText(message);
     }
