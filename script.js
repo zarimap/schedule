@@ -371,7 +371,7 @@ document.addEventListener('DOMContentLoaded', function() {
     chatNameInput.value = savedName;
   }
 
-  // 🔔 新着メンションのチェック処理
+  // 🔔 新着メンション（個人 ＆ @all）のチェック処理
   async function checkNewMentionsOnStartup() {
     if (hasCheckedMention) return;
     const myName = (chatNameInput.value || localStorage.getItem('science_club_chat_name') || '').trim();
@@ -404,22 +404,32 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
       }
 
+      // 🔴 個人メンション用正規表現（@自分の名前 の後ろに文字が続いていないか）
       const escapedName = escapeRegExp(myName);
-      const mentionRegex = new RegExp(`@${escapedName}(?![a-zA-Z0-9ぁ-んァ-ン一-龥ａ-ｚＡ-Z０-９])`, 'u');
+      const myNameRegex = new RegExp(`@${escapedName}(?![a-zA-Z0-9ぁ-んァ-ン一-龥ａ-ｚＡ-Z０-９])`, 'u');
+      
+      // 🔴 全員メンション用正規表現（@all または @ALL の後ろに文字が続いていないか）
+      const allMentionRegex = /@all(?![a-zA-Z0-9ぁ-んァ-ン一-龥ａ-ｚＡ-Z０-９])/iu;
 
       const unreadMentions = validMessages.filter(msg => {
         if (!msg.created_at) return false;
         const msgDate = new Date(msg.created_at);
         const isNew = msgDate > lastReadDate;
-        const isOther = (msg.name !== myName);
-        const hasMention = mentionRegex.test(msg.message);
-        return isNew && isOther && hasMention;
+        const isOther = (msg.name !== myName); // 自分の発言は除外
+        
+        const hasMyMention = myNameRegex.test(msg.message);
+        const hasAllMention = allMentionRegex.test(msg.message);
+
+        return isNew && isOther && (hasMyMention || hasAllMention);
       });
 
       if (unreadMentions.length > 0) {
         hasCheckedMention = true;
         const latest = unreadMentions[unreadMentions.length - 1];
-        mentionPopupText.innerHTML = `<strong>${escapeHtml(latest.name)}</strong>さんからのメンション:<br>「${escapeHtml(latest.message)}」`;
+        const isAll = allMentionRegex.test(latest.message);
+        
+        const labelText = isAll ? '全員からのメンション (@all)' : 'あなた宛てのメンション';
+        mentionPopupText.innerHTML = `<strong>${escapeHtml(latest.name)}</strong>さんからの${labelText}:<br>「${escapeHtml(latest.message)}」`;
         mentionModal.style.display = 'flex';
       }
     } catch (err) {
@@ -480,16 +490,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // 🔗 メッセージ内のURLをリンク化し、さらにカード型のプレビューを生成する関数
+  // 🔗 メッセージ内のURLリンク化＆プレビュー生成
   function parseMessageBodyWithLinks(text) {
     const safeText = escapeHtml(text);
-    // http:// または https:// から始まるURL、または www. やドメイン形式のURLを自動検出
-    // （http(s)が無い場合は自動で https:// を補完してリンク化する）
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*))/gu;
 
     let foundUrls = [];
     
-    // 本文内のURLを <a href="..." target="_blank" rel="noopener noreferrer"> に置換
     const linkedHtml = safeText.replace(urlRegex, (match) => {
       let href = match;
       if (!href.startsWith('http://') && !href.startsWith('https://')) {
@@ -501,7 +508,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let previewHtml = '';
     if (foundUrls.length > 0) {
-      // 見つかった最初のURLをベースにプレビューカードを生成
       const targetUrl = foundUrls[0];
       let domain = '';
       try {
@@ -559,7 +565,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
       const body = document.createElement('div');
       body.className = 'chat-msg-body';
-      // URL自動リンク化＆プレビュー生成関数を適用
       body.innerHTML = parseMessageBodyWithLinks(msg.message || '');
 
       item.appendChild(header);
@@ -1046,7 +1051,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
 
       if (res) {
-        const insertedItem = Array.isArray(res) ? res.json ? res.json() : res[0] : res;
+        const insertedItem = Array.isArray(res) ? res[0] : res;
         const createdEvent = {
           id: insertedItem.id || Date.now(),
           title: title,
@@ -1060,7 +1065,6 @@ document.addEventListener('DOMContentLoaded', function() {
         currentCache.push(insertedItem.id ? insertedItem : createdEvent);
         localStorage.setItem(CACHE_KEY, JSON.stringify(currentCache));
 
-        card = null; // reset
         calendar.refetchEvents();
 
         eventTitleInput.value = '';
