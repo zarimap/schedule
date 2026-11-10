@@ -371,7 +371,7 @@ document.addEventListener('DOMContentLoaded', function() {
     chatNameInput.value = savedName;
   }
 
-  // 🔔 新着メンションのチェック処理（チャットキャッシュの最後尾時刻を既読基準にする）
+  // 🔔 新着メンションのチェック処理
   async function checkNewMentionsOnStartup() {
     if (hasCheckedMention) return;
     const myName = (chatNameInput.value || localStorage.getItem('science_club_chat_name') || '').trim();
@@ -384,7 +384,6 @@ document.addEventListener('DOMContentLoaded', function() {
       const validMessages = rawData.filter(msg => msg && msg.message && typeof msg.message === 'string' && msg.message.trim() !== '');
       if (validMessages.length === 0) return;
 
-      // チャットキャッシュから「前回の最後のメッセージ時刻」を読み込む
       const cachedChat = localStorage.getItem(CHAT_CACHE_KEY);
       let lastReadDate = new Date(0);
 
@@ -401,12 +400,10 @@ document.addEventListener('DOMContentLoaded', function() {
           console.warn("キャッシュ解析エラー:", e);
         }
       } else {
-        // 初回は過去ログのメンションで暴発しないよう、現在の最新メッセージを基準にしてキャッシュ保存
         localStorage.setItem(CHAT_CACHE_KEY, JSON.stringify(validMessages));
         return;
       }
 
-      // 🔴 厳密なメンション判定（@名前 の後ろに文字が続いていないか）
       const escapedName = escapeRegExp(myName);
       const mentionRegex = new RegExp(`@${escapedName}(?![a-zA-Z0-9ぁ-んァ-ン一-龥ａ-ｚＡ-Z０-９])`, 'u');
 
@@ -430,16 +427,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // ページ読み込み時に一度チェック実行
   setTimeout(checkNewMentionsOnStartup, 1000);
 
-  // ポップアップを閉じる（チャットの最新キャッシュを既読として同期）
   function closeMentionPopup() {
     mentionModal.style.display = 'none';
     syncCacheToLatest();
   }
 
-  // チャットのキャッシュを最新の状態に更新する関数
   async function syncCacheToLatest() {
     try {
       const rawData = await fetchGasApi({ url: `${GAS_WEB_APP_URL}?action=getChat` });
@@ -486,6 +480,51 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
+  // 🔗 メッセージ内のURLをリンク化し、さらにカード型のプレビューを生成する関数
+  function parseMessageBodyWithLinks(text) {
+    const safeText = escapeHtml(text);
+    // http:// または https:// から始まるURL、または www. やドメイン形式のURLを自動検出
+    // （http(s)が無い場合は自動で https:// を補完してリンク化する）
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*))/gu;
+
+    let foundUrls = [];
+    
+    // 本文内のURLを <a href="..." target="_blank" rel="noopener noreferrer"> に置換
+    const linkedHtml = safeText.replace(urlRegex, (match) => {
+      let href = match;
+      if (!href.startsWith('http://') && !href.startsWith('https://')) {
+        href = 'https://' + href;
+      }
+      foundUrls.push(href);
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color: #007bff; text-decoration: underline; word-break: break-all;">${match}</a>`;
+    });
+
+    let previewHtml = '';
+    if (foundUrls.length > 0) {
+      // 見つかった最初のURLをベースにプレビューカードを生成
+      const targetUrl = foundUrls[0];
+      let domain = '';
+      try {
+        const parsedObj = new URL(targetUrl);
+        domain = parsedObj.hostname;
+      } catch(e) {
+        domain = targetUrl;
+      }
+
+      previewHtml = `
+        <a href="${targetUrl}" target="_blank" rel="noopener noreferrer" class="chat-link-preview" style="display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 8px 10px; background: #f1f3f5; border: 1px solid #e0e0e0; border-radius: 6px; text-decoration: none; color: inherit; transition: background 0.2s;">
+          <img src="https://www.google.com/s2/favicons?domain=${domain}&sz=32" alt="favicon" style="width: 16px; height: 16px; flex-shrink: 0;" onerror="this.style.display='none'">
+          <div style="overflow: hidden; min-width: 0;">
+            <div style="font-size: 0.8rem; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${domain}</div>
+            <div style="font-size: 0.85rem; font-weight: bold; color: #007bff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${targetUrl}</div>
+          </div>
+        </a>
+      `;
+    }
+
+    return `<div>${linkedHtml}</div>${previewHtml}`;
+  }
+
   function renderChatMessages(messages, scrollToBottom) {
     const currentName = chatNameInput.value.trim();
     chatMessagesArea.innerHTML = '';
@@ -520,7 +559,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
       const body = document.createElement('div');
       body.className = 'chat-msg-body';
-      body.textContent = msg.message;
+      // URL自動リンク化＆プレビュー生成関数を適用
+      body.innerHTML = parseMessageBodyWithLinks(msg.message || '');
 
       item.appendChild(header);
       item.appendChild(body);
@@ -535,7 +575,7 @@ document.addEventListener('DOMContentLoaded', function() {
   function openChatModal() {
     chatModalOverlay.style.display = 'flex';
     loadChatMessages(true);
-    syncCacheToLatest(); // チャットを開いたら既読化
+    syncCacheToLatest();
     if (!chatInterval) {
       chatInterval = setInterval(() => loadChatMessages(false), 5000);
     }
@@ -545,7 +585,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function closeChatModal() {
     chatModalOverlay.style.display = 'none';
-    syncCacheToLatest(); // チャットを閉じたら既読化
+    syncCacheToLatest();
     if (chatInterval) {
       clearInterval(chatInterval);
       chatInterval = null;
@@ -1006,7 +1046,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
 
       if (res) {
-        const insertedItem = Array.isArray(res) ? res[0] : res;
+        const insertedItem = Array.isArray(res) ? res.json ? res.json() : res[0] : res;
         const createdEvent = {
           id: insertedItem.id || Date.now(),
           title: title,
@@ -1020,6 +1060,7 @@ document.addEventListener('DOMContentLoaded', function() {
         currentCache.push(insertedItem.id ? insertedItem : createdEvent);
         localStorage.setItem(CACHE_KEY, JSON.stringify(currentCache));
 
+        card = null; // reset
         calendar.refetchEvents();
 
         eventTitleInput.value = '';
