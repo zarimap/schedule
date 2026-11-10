@@ -745,3 +745,51 @@ h1 { margin: 0; font-size: 1.5rem; }
     margin-top: 15px; font-size: 16px; font-weight: bold;
     color: #007bff; letter-spacing: 0.5px; text-align: center; padding: 0 20px;
 }
+
+/* 🕒 時間タブのサブメニュー（ポップアップ） */
+.nav-item-wrapper {
+    position: relative;
+}
+
+.sub-nav-popup {
+    display: none;
+    position: absolute;
+    left: 100%;
+    top: 0;
+    background: white;
+    border: 1px solid #ddd;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    border-radius: 8px;
+    padding: 6px;
+    z-index: 1000;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 160px;
+}
+
+/* ホバー時 または タップ・アクティブ時に表示 */
+.nav-item-wrapper:hover .sub-nav-popup,
+.nav-item-wrapper.active-popup .sub-nav-popup {
+    display: flex;
+}
+
+.sub-nav-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    font-size: 0.9rem;
+    color: #333;
+    transition: background 0.2s, color 0.2s;
+}
+
+.sub-nav-tab:hover {
+    background: #f1f3f5;
+    color: #007bff;
+}
