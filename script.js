@@ -6,12 +6,12 @@ const CHAT_CACHE_KEY = 'science_club_chat_cache_v1';
 localStorage.removeItem('science_club_events_cache');
 
 function showLoading(msg = '処理中…') {
-  loadingText.textContent = msg;
-  loadingOverlay.style.display = 'flex';
+  if (loadingText) loadingText.textContent = msg;
+  if (loadingOverlay) loadingOverlay.style.display = 'flex';
 }
 
 function hideLoading() {
-  loadingOverlay.style.display = 'none';
+  if (loadingOverlay) loadingOverlay.style.display = 'none';
 }
 
 const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzVQBAkt6k3a0WJq7joAvtp0mFMuHZDjmgaRxmBS_gvRH5dTR-wc6TF_u-2-BBvt6Lpgw/exec";
@@ -85,6 +85,7 @@ function formatEvents(data) {
 // 📌 README.md の読み込み
 async function loadReadmeVersion() {
   const versionContentEl = document.getElementById('versionContent');
+  if (!versionContentEl) return;
   try {
     const readmePath = ['.', 'README.md'].join('/');
     const res = await fetch(`${readmePath}?v=${Date.now()}`);
@@ -124,6 +125,7 @@ async function loadReadmeVersion() {
 // ℹ️ info.md の読み込み＆ --- 区切りセクション分け描画
 async function loadInfoContent() {
   const infoContainer = document.getElementById('infoContentContainer');
+  if (!infoContainer) return;
   try {
     const res = await fetch(`./info.md?v=${Date.now()}`);
     if (!res.ok) throw new Error("info.mdが見つかりませんでした");
@@ -160,7 +162,7 @@ async function loadInfoContent() {
   }
 }
 
-// 🚨 importance.txt の読み込み＆重要なお知らせ表示処理（独立・低速弾幕対応版）
+// 🚨 importance.txt の読み込み＆重要なお知らせ表示処理
 async function loadImportance() {
   const importanceCard = document.getElementById('importanceCard');
   if (!importanceCard) return;
@@ -243,12 +245,13 @@ function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// ☀️ 天気予報API連携処理（気象庁予報）
+// ☀️ 天気予報API連携処理
 let jmaForecastCache = null;
 
 async function loadWeatherData() {
   const forecastContainer = document.getElementById('weatherForecastContainer');
   const citySelect = document.getElementById('weatherCitySelect');
+  if (!forecastContainer || !citySelect) return;
 
   try {
     if (!jmaForecastCache) {
@@ -267,7 +270,7 @@ async function loadWeatherData() {
 
 function renderWeatherForecast(selectedCityCode) {
   const forecastContainer = document.getElementById('weatherForecastContainer');
-  if (!jmaForecastCache || !jmaForecastCache[0]) return;
+  if (!forecastContainer || !jmaForecastCache || !jmaForecastCache[0]) return;
 
   try {
     const timeSeries = jmaForecastCache[0].timeSeries;
@@ -367,13 +370,13 @@ document.addEventListener('DOMContentLoaded', function() {
   let hasCheckedMention = false;
 
   const savedName = localStorage.getItem('science_club_chat_name');
-  if (savedName) {
+  if (savedName && chatNameInput) {
     chatNameInput.value = savedName;
   }
 
   // 🔔 新着メンション（個人 ＆ @all）のチェック処理
   async function checkNewMentionsOnStartup() {
-    if (hasCheckedMention) return;
+    if (hasCheckedMention || !chatNameInput) return;
     const myName = (chatNameInput.value || localStorage.getItem('science_club_chat_name') || '').trim();
     if (!myName) return;
 
@@ -404,18 +407,15 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
       }
 
-      // 🔴 個人メンション用正規表現（@自分の名前 の後ろに文字が続いていないか）
       const escapedName = escapeRegExp(myName);
       const myNameRegex = new RegExp(`@${escapedName}(?![a-zA-Z0-9ぁ-んァ-ン一-龥ａ-ｚＡ-Z０-９])`, 'u');
-      
-      // 🔴 全員メンション用正規表現（@all または @ALL の後ろに文字が続いていないか）
       const allMentionRegex = /@all(?![a-zA-Z0-9ぁ-んァ-ン一-龥ａ-ｚＡ-Z０-９])/iu;
 
       const unreadMentions = validMessages.filter(msg => {
         if (!msg.created_at) return false;
         const msgDate = new Date(msg.created_at);
         const isNew = msgDate > lastReadDate;
-        const isOther = (msg.name !== myName); // 自分の発言は除外
+        const isOther = (msg.name !== myName);
         
         const hasMyMention = myNameRegex.test(msg.message);
         const hasAllMention = allMentionRegex.test(msg.message);
@@ -423,7 +423,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return isNew && isOther && (hasMyMention || hasAllMention);
       });
 
-      if (unreadMentions.length > 0) {
+      if (unreadMentions.length > 0 && mentionModal && mentionPopupText) {
         hasCheckedMention = true;
         const latest = unreadMentions[unreadMentions.length - 1];
         const isAll = allMentionRegex.test(latest.message);
@@ -440,7 +440,7 @@ document.addEventListener('DOMContentLoaded', function() {
   setTimeout(checkNewMentionsOnStartup, 1000);
 
   function closeMentionPopup() {
-    mentionModal.style.display = 'none';
+    if (mentionModal) mentionModal.style.display = 'none';
     syncCacheToLatest();
   }
 
@@ -456,15 +456,19 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  closeMentionModal.addEventListener('click', closeMentionPopup);
-  mentionModal.addEventListener('click', (e) => {
-    if (e.target === mentionModal) closeMentionPopup();
-  });
+  if (closeMentionModal) closeMentionModal.addEventListener('click', closeMentionPopup);
+  if (mentionModal) {
+    mentionModal.addEventListener('click', (e) => {
+      if (e.target === mentionModal) closeMentionPopup();
+    });
+  }
 
-  openChatFromMentionBtn.addEventListener('click', () => {
-    closeMentionPopup();
-    openChatModal();
-  });
+  if (openChatFromMentionBtn) {
+    openChatFromMentionBtn.addEventListener('click', () => {
+      closeMentionPopup();
+      openChatModal();
+    });
+  }
 
   async function loadChatMessages(scrollToBottom = false) {
     const cachedChat = localStorage.getItem(CHAT_CACHE_KEY);
@@ -493,7 +497,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // 🔗 メッセージ内のURLリンク化＆プレビュー生成
   function parseMessageBodyWithLinks(text) {
     const safeText = escapeHtml(text);
-    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*))/gu;
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b[-a-zA-Z0-9()@:%_\+.~#?&//=]*)/g;
 
     let foundUrls = [];
     
@@ -518,7 +522,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
 
       previewHtml = `
-        <a href="${targetUrl}" target="_blank" rel="noopener noreferrer" class="chat-link-preview" style="display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 8px 10px; background: #f1f3f5; border: 1px solid #e0e0e0; border-radius: 6px; text-decoration: none; color: inherit; transition: background 0.2s;">
+        <a href="${targetUrl}" target="_blank" rel="noopener noreferrer" class="chat-link-preview" style="display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 8px 10px; background: #f1f3f5; border: 1px solid #e0e0e0; border-radius: 6px; text-decoration: none; color: inherit;">
           <img src="https://www.google.com/s2/favicons?domain=${domain}&sz=32" alt="favicon" style="width: 16px; height: 16px; flex-shrink: 0;" onerror="this.style.display='none'">
           <div style="overflow: hidden; min-width: 0;">
             <div style="font-size: 0.8rem; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${domain}</div>
@@ -532,6 +536,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function renderChatMessages(messages, scrollToBottom) {
+    if (!chatMessagesArea || !chatNameInput) return;
     const currentName = chatNameInput.value.trim();
     chatMessagesArea.innerHTML = '';
 
@@ -578,7 +583,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function openChatModal() {
-    chatModalOverlay.style.display = 'flex';
+    if (chatModalOverlay) chatModalOverlay.style.display = 'flex';
     loadChatMessages(true);
     syncCacheToLatest();
     if (!chatInterval) {
@@ -586,10 +591,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  openChatBtn.addEventListener('click', openChatModal);
+  if (openChatBtn) openChatBtn.addEventListener('click', openChatModal);
 
   function closeChatModal() {
-    chatModalOverlay.style.display = 'none';
+    if (chatModalOverlay) chatModalOverlay.style.display = 'none';
     syncCacheToLatest();
     if (chatInterval) {
       clearInterval(chatInterval);
@@ -597,19 +602,24 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  closeChatBtn.addEventListener('click', closeChatModal);
-  chatModalOverlay.addEventListener('click', (e) => {
-    if (e.target === chatModalOverlay) closeChatModal();
-  });
+  if (closeChatBtn) closeChatBtn.addEventListener('click', closeChatModal);
+  if (chatModalOverlay) {
+    chatModalOverlay.addEventListener('click', (e) => {
+      if (e.target === chatModalOverlay) closeChatModal();
+    });
+  }
 
   async function sendChatMessage() {
+    if (!chatNameInput || !chatTextInput || !chatSendBtn) return;
     const name = chatNameInput.value.trim() || '名無し';
     let message = chatTextInput.value.trim();
 
     if (!message) return;
 
-    // 🔴 NGワードフィルタ適用
-    message = filterChatText(message);
+    // NGワードフィルターの安全な適用
+    if (typeof filterChatText === 'function') {
+      message = filterChatText(message);
+    }
 
     localStorage.setItem('science_club_chat_name', name);
     chatTextInput.disabled = true;
@@ -637,15 +647,16 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  chatSendBtn.addEventListener('click', sendChatMessage);
+  if (chatSendBtn) chatSendBtn.addEventListener('click', sendChatMessage);
 
-  // ⌨️ Shift + Enterで改行、Enterのみで送信
-  chatTextInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendChatMessage();
-    }
-  });
+  if (chatTextInput) {
+    chatTextInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChatMessage();
+      }
+    });
+  }
 
   // --- モーダル関連の処理 ---
   const openHelpBtn = document.getElementById('openHelpBtn');
@@ -669,6 +680,7 @@ document.addEventListener('DOMContentLoaded', function() {
   let currentScale = 1.0;
 
   function updateZoom(newScale) {
+    if (!pdfFrame || !zoomResetBtn) return;
     currentScale = Math.max(0.5, Math.min(3.0, newScale));
     pdfFrame.style.width = `${(100 / currentScale)}%`;
     pdfFrame.style.height = `${(100 / currentScale)}%`;
@@ -676,122 +688,133 @@ document.addEventListener('DOMContentLoaded', function() {
     zoomResetBtn.textContent = `${Math.round(currentScale * 100)}%`;
   }
 
-  zoomInBtn.addEventListener('click', () => updateZoom(currentScale + 0.25));
-  zoomOutBtn.addEventListener('click', () => updateZoom(currentScale - 0.25));
-  zoomResetBtn.addEventListener('click', () => updateZoom(1.0));
+  if (zoomInBtn) zoomInBtn.addEventListener('click', () => updateZoom(currentScale + 0.25));
+  if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => updateZoom(currentScale - 0.25));
+  if (zoomResetBtn) zoomResetBtn.addEventListener('click', () => updateZoom(1.0));
 
-  fullscreenBtn.addEventListener('click', () => {
-    if (!document.fullscreenElement) {
-      if (pdfContainer.requestFullscreen) {
-        pdfContainer.requestFullscreen();
-      } else if (pdfContainer.webkitRequestFullscreen) {
-        pdfContainer.webkitRequestFullscreen();
+  if (fullscreenBtn && pdfContainer) {
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        if (pdfContainer.requestFullscreen) {
+          pdfContainer.requestFullscreen();
+        } else if (pdfContainer.webkitRequestFullscreen) {
+          pdfContainer.webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
       }
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-      } else if (document.webkitExitFullscreen) {
-        document.webkitExitFullscreen();
-      }
-    }
-  });
+    });
+  }
 
   document.addEventListener('fullscreenchange', () => {
     updateZoom(1.0);
   });
 
-  openHelpBtn.addEventListener('click', () => helpModal.style.display = 'flex');
-  closeHelpBtn.addEventListener('click', () => helpModal.style.display = 'none');
-  helpModal.addEventListener('click', (e) => {
-    if (e.target === helpModal) helpModal.style.display = 'none';
-  });
+  if (openHelpBtn && helpModal) openHelpBtn.addEventListener('click', () => helpModal.style.display = 'flex');
+  if (closeHelpBtn && helpModal) closeHelpBtn.addEventListener('click', () => helpModal.style.display = 'none');
+  if (helpModal) {
+    helpModal.addEventListener('click', (e) => {
+      if (e.target === helpModal) helpModal.style.display = 'none';
+    });
+  }
 
   // 📋 週間行事予定表ボタンの処理
-  openWeeklyBtn.addEventListener('click', async () => {
-    updateZoom(1.0);
-    const pdfUrl = ['.', 'weeklySchedule', 'schedule.pdf'].join('/');
-    scheduleTitle.textContent = "📋 週間行事予定表（読み込み中…）";
-    pdfFrame.src = pdfUrl;
-    scheduleModal.style.display = 'flex';
+  if (openWeeklyBtn) {
+    openWeeklyBtn.addEventListener('click', async () => {
+      updateZoom(1.0);
+      const pdfUrl = ['.', 'weeklySchedule', 'schedule.pdf'].join('/');
+      if (scheduleTitle) scheduleTitle.textContent = "📋 週間行事予定表（読み込み中…）";
+      if (pdfFrame) pdfFrame.src = pdfUrl;
+      if (scheduleModal) scheduleModal.style.display = 'flex';
 
-    try {
-      const res = await fetch(pdfUrl, { method: 'HEAD' });
-      const lastModified = res.headers.get('Last-Modified');
-      if (lastModified) {
-        const fileDate = new Date(lastModified);
-        const monthNum = fileDate.getMonth() + 1;
-        const dayNum = fileDate.getDate();
-        scheduleTitle.textContent = `📋 週間行事予定表（${monthNum}月${dayNum}日更新）`;
-      } else {
-        scheduleTitle.textContent = "📋 週間行事予定表";
+      try {
+        const res = await fetch(pdfUrl, { method: 'HEAD' });
+        const lastModified = res.headers.get('Last-Modified');
+        if (lastModified && scheduleTitle) {
+          const fileDate = new Date(lastModified);
+          const monthNum = fileDate.getMonth() + 1;
+          const dayNum = fileDate.getDate();
+          scheduleTitle.textContent = `📋 週間行事予定表（${monthNum}月${dayNum}日更新）`;
+        } else if (scheduleTitle) {
+          scheduleTitle.textContent = "📋 週間行事予定表";
+        }
+      } catch (e) {
+        if (scheduleTitle) scheduleTitle.textContent = "📋 週間行事予定表";
       }
-    } catch (e) {
-      console.warn("最終更新日の取得に失敗しました:", e);
-      scheduleTitle.textContent = "📋 週間行事予定表";
-    }
-  });
+    });
+  }
 
   // 📄 月間行事予定表ボタンの処理
-  openMonthlyBtn.addEventListener('click', async () => {
-    updateZoom(1.0);
-    const pdfUrl = ['.', 'monthlySchedule', 'schedule.pdf'].join('/');
-    scheduleTitle.textContent = "📄 月間行事予定表（読み込み中…）";
-    pdfFrame.src = pdfUrl;
-    scheduleModal.style.display = 'flex';
+  if (openMonthlyBtn) {
+    openMonthlyBtn.addEventListener('click', async () => {
+      updateZoom(1.0);
+      const pdfUrl = ['.', 'monthlySchedule', 'schedule.pdf'].join('/');
+      if (scheduleTitle) scheduleTitle.textContent = "📄 月間行事予定表（読み込み中…）";
+      if (pdfFrame) pdfFrame.src = pdfUrl;
+      if (scheduleModal) scheduleModal.style.display = 'flex';
 
-    try {
-      const res = await fetch(pdfUrl, { method: 'HEAD' });
-      const lastModified = res.headers.get('Last-Modified');
-      if (lastModified) {
-        const fileDate = new Date(lastModified);
-        const monthNum = fileDate.getMonth() + 1;
-        scheduleTitle.textContent = `📄 月間行事予定表（${monthNum}月）`;
-      } else {
-        scheduleTitle.textContent = "📄 月間行事予定表";
+      try {
+        const res = await fetch(pdfUrl, { method: 'HEAD' });
+        const lastModified = res.headers.get('Last-Modified');
+        if (lastModified && scheduleTitle) {
+          const fileDate = new Date(lastModified);
+          const monthNum = fileDate.getMonth() + 1;
+          scheduleTitle.textContent = `📄 月間行事予定表（${monthNum}月）`;
+        } else if (scheduleTitle) {
+          scheduleTitle.textContent = "📄 月間行事予定表";
+        }
+      } catch (e) {
+        if (scheduleTitle) scheduleTitle.textContent = "📄 月間行事予定表";
       }
-    } catch (e) {
-      console.warn("最終更新日の取得に失敗しました:", e);
-      scheduleTitle.textContent = "📄 月間行事予定表";
-    }
-  });
+    });
+  }
 
   // 📅 年間行事予定表ボタンの処理
-  openAnnualBtn.addEventListener('click', async () => {
-    updateZoom(1.0);
-    const pdfUrl = ['.', 'annualSchedule', 'schedule.pdf'].join('/');
-    scheduleTitle.textContent = "📅 年間行事予定表（読み込み中…）";
-    pdfFrame.src = pdfUrl;
-    scheduleModal.style.display = 'flex';
+  if (openAnnualBtn) {
+    openAnnualBtn.addEventListener('click', async () => {
+      updateZoom(1.0);
+      const pdfUrl = ['.', 'annualSchedule', 'schedule.pdf'].join('/');
+      if (scheduleTitle) scheduleTitle.textContent = "📅 年間行事予定表（読み込み中…）";
+      if (pdfFrame) pdfFrame.src = pdfUrl;
+      if (scheduleModal) scheduleModal.style.display = 'flex';
 
-    try {
-      const res = await fetch(pdfUrl, { method: 'HEAD' });
-      const lastModified = res.headers.get('Last-Modified');
-      if (lastModified) {
-        const fileDate = new Date(lastModified);
-        const yearNum = fileDate.getFullYear();
-        scheduleTitle.textContent = `📅 年間行事予定表（${yearNum}年）`;
-      } else {
-        scheduleTitle.textContent = "📅 年間行事予定表";
+      try {
+        const res = await fetch(pdfUrl, { method: 'HEAD' });
+        const lastModified = res.headers.get('Last-Modified');
+        if (lastModified && scheduleTitle) {
+          const fileDate = new Date(lastModified);
+          const yearNum = fileDate.getFullYear();
+          scheduleTitle.textContent = `📅 年間行事予定表（${yearNum}年）`;
+        } else if (scheduleTitle) {
+          scheduleTitle.textContent = "📅 年間行事予定表";
+        }
+      } catch (e) {
+        if (scheduleTitle) scheduleTitle.textContent = "📅 年間行事予定表";
       }
-    } catch (e) {
-      console.warn("最終更新日の取得に失敗しました:", e);
-      scheduleTitle.textContent = "📅 年間行事予定表";
-    }
-  });
+    });
+  }
 
-  closeScheduleBtn.addEventListener('click', () => {
-    scheduleModal.style.display = 'none';
-    pdfFrame.src = "";
-    if (document.fullscreenElement) document.exitFullscreen();
-  });
-
-  scheduleModal.addEventListener('click', (e) => {
-    if (e.target === scheduleModal) {
+  if (closeScheduleBtn && scheduleModal && pdfFrame) {
+    closeScheduleBtn.addEventListener('click', () => {
       scheduleModal.style.display = 'none';
       pdfFrame.src = "";
       if (document.fullscreenElement) document.exitFullscreen();
-    }
-  });
+    });
+  }
+
+  if (scheduleModal && pdfFrame) {
+    scheduleModal.addEventListener('click', (e) => {
+      if (e.target === scheduleModal) {
+        scheduleModal.style.display = 'none';
+        pdfFrame.src = "";
+        if (document.fullscreenElement) document.exitFullscreen();
+      }
+    });
+  }
 
   // --- フォーム関連の処理 ---
   const allDayCheck = document.getElementById('allDayCheck');
@@ -800,25 +823,31 @@ document.addEventListener('DOMContentLoaded', function() {
   const eventStartDate = document.getElementById('eventStartDate');
   const eventEndDate = document.getElementById('eventEndDate');
 
-  allDayCheck.addEventListener('change', function() {
-    const isAllDay = this.checked;
-    eventStartTime.disabled = isAllDay;
-    eventEndTime.disabled = isAllDay;
-    if (isAllDay) {
-      eventStartTime.value = '';
-      eventEndTime.value = '';
-    }
-  });
+  if (allDayCheck && eventStartTime && eventEndTime) {
+    allDayCheck.addEventListener('change', function() {
+      const isAllDay = this.checked;
+      eventStartTime.disabled = isAllDay;
+      eventEndTime.disabled = isAllDay;
+      if (isAllDay) {
+        eventStartTime.value = '';
+        eventEndTime.value = '';
+      }
+    });
+  }
 
-  eventStartDate.addEventListener('change', function() {
-    if (!eventEndDate.value) {
-      eventEndDate.value = this.value;
-    }
-  });
+  if (eventStartDate && eventEndDate) {
+    eventStartDate.addEventListener('change', function() {
+      if (!eventEndDate.value) {
+        eventEndDate.value = this.value;
+      }
+    });
+  }
 
   var calendarEl = document.getElementById('calendar');
   var eventTitleInput = document.getElementById('eventTitle');
   var addBtn = document.getElementById('addBtn');
+
+  if (!calendarEl) return;
 
   var calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: 'dayGridMonth',
@@ -995,92 +1024,94 @@ document.addEventListener('DOMContentLoaded', function() {
   calendar.render();
   window.calendar = calendar;
 
-  addBtn.addEventListener('click', async function() {
-    var title = eventTitleInput.value.trim();
-    var startDate = eventStartDate.value;
-    var endDate = eventEndDate.value || startDate;
-    var isAllDay = allDayCheck.checked;
-    var startTime = eventStartTime.value;
-    var endTime = eventEndTime.value;
+  if (addBtn) {
+    addBtn.addEventListener('click', async function() {
+      var title = eventTitleInput ? eventTitleInput.value.trim() : '';
+      var startDate = eventStartDate ? eventStartDate.value : '';
+      var endDate = eventEndDate ? eventEndDate.value || startDate : '';
+      var isAllDay = allDayCheck ? allDayCheck.checked : true;
+      var startTime = eventStartTime ? eventStartTime.value : '';
+      var endTime = eventEndTime ? eventEndTime.value : '';
 
-    if (!title || !startDate) {
-      alert('予定の名前と開始日を入力してください');
-      return;
-    }
-
-    let startIso = '';
-    let endIso = '';
-
-    if (isAllDay) {
-      startIso = startDate;
-      let endD = new Date(endDate);
-      endD.setDate(endD.getDate() + 1);
-      endIso = endD.toISOString().split('T')[0];
-    } else {
-      if (!startTime) {
-        alert('開始時間を入力してください');
+      if (!title || !startDate) {
+        alert('予定の名前と開始日を入力してください');
         return;
       }
-      startIso = `${startDate}T${startTime}:00+09:00`;
-      if (endTime) {
-        endIso = `${endDate}T${endTime}:00+09:00`;
+
+      let startIso = '';
+      let endIso = '';
+
+      if (isAllDay) {
+        startIso = startDate;
+        let endD = new Date(endDate);
+        endD.setDate(endD.getDate() + 1);
+        endIso = endD.toISOString().split('T')[0];
       } else {
-        let [sh, sm] = startTime.split(':').map(Number);
-        let eh = (sh + 1) % 24;
-        let emStr = sm.toString().padStart(2, '0');
-        let ehStr = eh.toString().padStart(2, '0');
-        endIso = `${endDate}T${ehStr}:${emStr}:00+09:00`;
-      }
-    }
-
-    const newEventPayload = {
-      title: title, 
-      start: startIso, 
-      end: endIso, 
-      all_day: isAllDay
-    };
-
-    showLoading('追加中…');
-    try {
-      const res = await fetchGasApi({
-        method: 'POST',
-        body: {
-          action: 'insert',
-          data: [newEventPayload]
+        if (!startTime) {
+          alert('開始時間を入力してください');
+          return;
         }
-      });
-
-      if (res) {
-        const insertedItem = Array.isArray(res) ? res[0] : res;
-        const createdEvent = {
-          id: insertedItem.id || Date.now(),
-          title: title,
-          start: startIso,
-          end: endIso,
-          allDay: isAllDay
-        };
-
-        const cachedData = localStorage.getItem(CACHE_KEY);
-        let currentCache = cachedData ? JSON.parse(cachedData) : [];
-        currentCache.push(insertedItem.id ? insertedItem : createdEvent);
-        localStorage.setItem(CACHE_KEY, JSON.stringify(currentCache));
-
-        calendar.refetchEvents();
-
-        eventTitleInput.value = '';
-        eventStartDate.value = '';
-        eventEndDate.value = '';
-        eventStartTime.value = '';
-        eventEndTime.value = '';
-        allDayCheck.checked = true;
-        eventStartTime.disabled = true;
-        eventEndTime.disabled = true;
+        startIso = `${startDate}T${startTime}:00+09:00`;
+        if (endTime) {
+          endIso = `${endDate}T${endTime}:00+09:00`;
+        } else {
+          let [sh, sm] = startTime.split(':').map(Number);
+          let eh = (sh + 1) % 24;
+          let emStr = sm.toString().padStart(2, '0');
+          let ehStr = eh.toString().padStart(2, '0');
+          endIso = `${endDate}T${ehStr}:${emStr}:00+09:00`;
+        }
       }
 
-    } catch (err) {
-      alert('予定の追加に失敗しました');
-    } finally {
-      hideLoading();
-    }
-  });
+      const newEventPayload = {
+        title: title, 
+        start: startIso, 
+        end: endIso, 
+        all_day: isAllDay
+      };
+
+      showLoading('追加中…');
+      try {
+        const res = await fetchGasApi({
+          method: 'POST',
+          body: {
+            action: 'insert',
+            data: [newEventPayload]
+          }
+        });
+
+        if (res) {
+          const insertedItem = Array.isArray(res) ? res[0] : res;
+          const createdEvent = {
+            id: insertedItem.id || Date.now(),
+            title: title,
+            start: startIso,
+            end: endIso,
+            allDay: isAllDay
+          };
+
+          const cachedData = localStorage.getItem(CACHE_KEY);
+          let currentCache = cachedData ? JSON.parse(cachedData) : [];
+          currentCache.push(insertedItem.id ? insertedItem : createdEvent);
+          localStorage.setItem(CACHE_KEY, JSON.stringify(currentCache));
+
+          calendar.refetchEvents();
+
+          if (eventTitleInput) eventTitleInput.value = '';
+          if (eventStartDate) eventStartDate.value = '';
+          if (eventEndDate) eventEndDate.value = '';
+          if (eventStartTime) eventStartTime.value = '';
+          if (eventEndTime) eventEndTime.value = '';
+          if (allDayCheck) allDayCheck.checked = true;
+          if (eventStartTime) eventStartTime.disabled = true;
+          if (eventEndTime) eventEndTime.disabled = true;
+        }
+
+      } catch (err) {
+        alert('予定の追加に失敗しました');
+      } finally {
+        hideLoading();
+      }
+    });
+  }
 });
