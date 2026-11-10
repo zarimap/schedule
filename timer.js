@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
     timerSound.onerror = () => {
         timerSound.src = './sound.mp4';
     };
+    timerSound.loop = true; // 🔄 閉じるまでループ再生
 
     async function loadTimerAudio() {
         try {
@@ -110,20 +111,24 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             updateDisplay();
 
-            // 00:00 に到達した瞬間の処理
             if (totalSeconds <= 0) {
                 clearInterval(timerId);
                 isRunning = false;
                 
                 timerSound.currentTime = 0;
-                timerSound.play().catch(e => console.warn("タイマー音声再生エラー:", e));
-                
-                alert('⏲️ タイマー終了です！');
-                
-                timerSound.pause();
-                timerSound.currentTime = 0;
-
-                resetTimer();
+                timerSound.play().then(() => {
+                    // ポップアップを閉じたら（OKを押したら）音を止めて強制リセット
+                    alert('⏲️ タイマー終了です！');
+                    timerSound.pause();
+                    timerSound.currentTime = 0;
+                    resetTimer();
+                }).catch(e => {
+                    console.warn("タイマー音声自動再生ブロック:", e);
+                    alert('⏲️ タイマー終了です！');
+                    timerSound.pause();
+                    timerSound.currentTime = 0;
+                    resetTimer();
+                });
             }
         }, 1000);
     }

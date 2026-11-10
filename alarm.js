@@ -14,11 +14,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let alarms = JSON.parse(localStorage.getItem('science_club_alarms') || '[]');
     
-    // 音声オブジェクトの初期化（mp3を優先、失敗時はmp4を試す安全設計）
     let activeAudio = new Audio('./sound.mp3');
     activeAudio.onerror = () => {
         activeAudio.src = './sound.mp4';
     };
+    activeAudio.loop = true; // 🔄 閉じるまでループ再生
 
     async function loadCustomAudio() {
         try {
@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (playPromise !== undefined) {
                 playPromise.catch(error => {
                     console.warn("試聴再生エラー:", error);
-                    alert('音声を再生できませんでした。ファイル形式を確認してください。');
+                    alert('音声を再生できませんでした。画面を一度クリックしてからお試しください。');
                 });
             }
         });
@@ -96,12 +96,18 @@ document.addEventListener('DOMContentLoaded', function() {
         alarms.forEach(alarm => {
             if (alarm.time === currentHm && alarm.active && s === '00') {
                 activeAudio.currentTime = 0;
-                activeAudio.play().catch(e => console.warn("アラーム音声再生エラー:", e));
-                
-                if (confirm(`⏰ アラーム時刻です！（${alarm.time}）\n[OK]を押すと音を止めます。`)) {
+                // ブラウザの制限対策としてユーザー操作前に確実に音声を再ロード・再生
+                activeAudio.play().then(() => {
+                    if (confirm(`⏰ アラーム時刻です！（${alarm.time}）\n[OK]を押すと音を止めます。`)) {
+                        activeAudio.pause();
+                        activeAudio.currentTime = 0;
+                    }
+                }).catch(e => {
+                    console.warn("アラーム音声自動再生ブロック:", e);
+                    alert(`⏰ アラーム時刻です！（${alarm.time}）`);
                     activeAudio.pause();
                     activeAudio.currentTime = 0;
-                }
+                });
 
                 alarm.active = false; 
                 saveAndRender();
