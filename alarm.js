@@ -4,9 +4,81 @@ document.addEventListener('DOMContentLoaded', function() {
     const setBtn = document.getElementById('setAlarmBtn');
     const listEl = document.getElementById('alarmList');
 
+    // サウンド設定UIの要素
+    const soundFileInput = document.getElementById('soundFileInput');
+    const uploadSoundBtn = document.getElementById('uploadSoundBtn');
+    const previewSoundBtn = document.getElementById('previewSoundBtn');
+    const resetSoundBtn = document.getElementById('resetSoundBtn');
+    const soundStatusText = document.getElementById('soundStatusText');
+
     if (!clockEl) return;
 
     let alarms = JSON.parse(localStorage.getItem('science_club_alarms') || '[]');
+    let currentAudioUrl = './sound.mp4'; // デフォルト
+    let activeAudio = new Audio(currentAudioUrl);
+
+    // 🔄 IndexedDBからカスタム音声を読み込んでセットアップ
+    async function loadCustomAudio() {
+        try {
+            const file = await getCustomAudioFromDB();
+            if (file) {
+                currentAudioUrl = URL.createObjectURL(file);
+                activeAudio.src = currentAudioUrl;
+                if (soundStatusText) soundStatusText.textContent = `📌 カスタム音声適用中: ${file.name || 'アップロード音声'}`;
+                if (resetSoundBtn) resetSoundBtn.style.display = 'block';
+                if (previewSoundBtn) previewSoundBtn.disabled = false;
+            } else {
+                if (soundStatusText) soundStatusText.textContent = '📌 現在デフォルト音（sound.mp4）を使用中';
+                if (resetSoundBtn) resetSoundBtn.style.display = 'none';
+            }
+        } catch (e) {
+            console.warn("カスタム音声の読み込み失敗:", e);
+        }
+    }
+    loadCustomAudio();
+
+    // 音声ファイルの保存ボタン
+    if (uploadSoundBtn && soundFileInput) {
+        uploadSoundBtn.addEventListener('click', async () => {
+            const file = soundFileInput.files[0];
+            if (!file) {
+                alert('音声ファイルを選択してください。');
+                return;
+            }
+            try {
+                await saveCustomAudioToDB(file);
+                await loadCustomAudio();
+                alert('音声を保存しました！');
+                soundFileInput.value = '';
+            } catch (e) {
+                alert('音声の保存に失敗しました。');
+                console.error(e);
+            }
+        });
+    }
+
+    // 試聴ボタン
+    if (previewSoundBtn) {
+        previewSoundBtn.addEventListener('click', () => {
+            activeAudio.currentTime = 0;
+            activeAudio.play().catch(e => alert('音声を再生できませんでした。'));
+        });
+    }
+
+    // 初期音源に戻すボタン
+    if (resetSoundBtn) {
+        resetSoundBtn.addEventListener('click', async () => {
+            if (confirm('カスタム音声を削除して初期音源に戻しますか？')) {
+                await deleteCustomAudioFromDB();
+                currentAudioUrl = './sound.mp4';
+                activeAudio.src = currentAudioUrl;
+                if (soundStatusText) soundStatusText.textContent = '📌 初期音源に戻しました';
+                resetSoundBtn.style.display = 'none';
+                if (previewSoundBtn) previewSoundBtn.disabled = true;
+                alert('初期音源に戻しました。');
+            }
+        });
+    }
 
     function updateClock() {
         const now = new Date();
@@ -15,12 +87,18 @@ document.addEventListener('DOMContentLoaded', function() {
         const s = String(now.getSeconds()).padStart(2, '0');
         clockEl.textContent = `${h}:${m}:${s}`;
 
-        // アラームチェック
         const currentHm = `${h}:${m}`;
         alarms.forEach(alarm => {
             if (alarm.time === currentHm && alarm.active && s === '00') {
-                alert(`⏰ アラーム時刻です！（${alarm.time}）`);
-                alarm.active = false; // 鳴ったら一度無効化
+                activeAudio.currentTime = 0;
+                activeAudio.play().catch(e => console.warn("音声再生エラー:", e));
+                
+                if (confirm(`⏰ アラーム時刻です！（${alarm.time}）\n[OK]を押すと音を止めます。`)) {
+                    activeAudio.pause();
+                    activeAudio.currentTime = 0;
+                }
+
+                alarm.active = false; 
                 saveAndRender();
             }
         });
