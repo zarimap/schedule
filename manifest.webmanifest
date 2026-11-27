@@ -1,6 +1,6 @@
 {
   "name": "科学部 予定管理",
-  "short_name": "科学部予定",
+  "short_name": "科学部　予定管理",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f0f2f5",
