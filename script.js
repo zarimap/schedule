@@ -93,7 +93,7 @@ function hideLoading() {
   if (loadingOverlay) loadingOverlay.style.display = 'none';
 }
 
-const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzVQBAkt6k3a0WJq7joAvtp0mFMuHZDjmgaRxmBS_gvRH5dTR-wc6TF_u-2-BBvt6Lpgw/exec";
+const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwmvwOkfs9GroAvvfT3Zbb8bFrQgHfXpJhz5scJ-8CDR0XNCemSEeQtVhrF2wZcVhRHIQ/exec";
 
 async function fetchGasApi(options = {}, maxRetries = 2) {
   let attempt = 0;
