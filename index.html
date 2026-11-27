@@ -17,7 +17,7 @@
     <!-- FullCalendar v6 -->
     <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
     <!-- 外部CSS読み込み -->
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 
@@ -51,6 +51,11 @@
             <button class="nav-tab" data-target="stopwatch-pane" title="ストップウォッチ">
                 <span class="nav-icon">⏱️</span>
                 <span class="nav-label">ストップウォッチ</span>
+            </button>
+
+            <button class="nav-tab" data-target="todo-pane" title="ToDo">
+                <span class="nav-icon">📝</span>
+                <span class="nav-label">ToDo</span>
             </button>
 
             <button class="nav-tab" data-target="info-pane" title="情報">
@@ -134,7 +139,7 @@
 
             <!-- ドライブタブ（iframe埋め込み） -->
             <div class="tab-pane" id="drive-pane">
-                <iframe src="https://script.google.com/macros/s/AKfycbw-YScFSk1ft8o1VzsqEtZ7blBRugtJTMYuGC_VCBBvzUJMCGQjiExoq7nBuYacoPPs/exec" class="full-iframe" allowfullscreen></iframe>
+                <iframe src="https://script.google.com/macros/s/AKfycbyUfFWD0YhcATtz3hXMBq6ksLSmnQ3gYJd_mDDiF-w9BOEGXUekHrVBP_EiBc378uSJWw/exec" class="full-iframe" allowfullscreen></iframe>
             </div>
 
             <!-- 地震タブ（iframe埋め込み：Wolfx WebSocket連携ページ） -->
@@ -184,6 +189,42 @@
                         </div>
                         <div id="swLaps" style="max-height: 150px; overflow-y: auto; text-align: left; border-top: 1px solid #ddd; padding-top: 10px; font-size: 0.9rem; color: #555;"></div>
                     </div>
+                </div>
+            </div>
+
+            <!-- ToDoタブ -->
+            <div class="tab-pane" id="todo-pane">
+                <div class="todo-fullscreen-layout">
+                    <!-- 上部 1/3：新規ToDo入力欄（最大5行同時入力） -->
+                    <section class="todo-section todo-input-section">
+                        <div class="todo-section-header">
+                            <h2>📝 新規ToDoを追加</h2>
+                            <span class="todo-line-count" id="todoLineCount">0 / 5行（登録対象: 0件）</span>
+                        </div>
+                        <textarea id="todoMultiInput" class="todo-multi-textarea" rows="5" placeholder="1行につき1つのToDoを入力してください（同時に最大5行まで入力できます）"></textarea>
+                        <div class="todo-input-footer">
+                            <button type="button" class="submit-btn todo-add-btn" id="todoAddBtn">ToDoを追加する</button>
+                        </div>
+                    </section>
+
+                    <!-- 中央：これまでのToDo一覧（スクロール可） -->
+                    <section class="todo-section todo-list-section">
+                        <div class="todo-section-header">
+                            <h2>📋 ToDo一覧</h2>
+                            <span class="todo-count-badge" id="todoCountBadge">0件</span>
+                        </div>
+                        <div class="todo-list-scroll" id="todoListContainer"></div>
+                    </section>
+
+                    <!-- 下部：LocalStorage 使用量推定グラフ -->
+                    <section class="todo-section todo-storage-section">
+                        <div class="todo-section-header">
+                            <h2>💾 LocalStorage 使用状況（推定）</h2>
+                        </div>
+                        <div class="todo-storage-summary" id="todoStorageSummary">計算中…</div>
+                        <div class="todo-storage-bar" id="todoStorageBar"></div>
+                        <div class="todo-storage-legend" id="todoStorageLegend"></div>
+                    </section>
                 </div>
             </div>
 
@@ -274,6 +315,7 @@
     <!-- 外部JS読み込み -->
     <script src="filter.js"></script>
     <script src="stopwatch.js"></script>
-    <script src="script.js"></script>
+    <script src="todo.js"></script>
+    <script src="script.js?v=3"></script>
 </body>
 </html>
