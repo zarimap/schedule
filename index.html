@@ -1,361 +1,1150 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset='utf-8' />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta property="og:type" content="article" />
-    <meta property="og:url" content="https://maps.zaritsuri.com/schedule/" />
-    <meta property="og:image" content="https://maps.zaritsuri.com/schedule/" />
-    <meta property="og:locale" content="ja_JP" />
-    <title>科学部 予定管理</title>
-    <link rel="icon" href="./favicon.ico" type="image/x-icon">
-    <link rel="apple-touch-icon" size="180x180" href="apple-touch-icon.png">
-    <!-- FullCalendar v6 -->
-    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
-    <!-- 外部CSS読み込み -->
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
+const loadingOverlay = document.getElementById('loadingOverlay');
+const loadingText = document.getElementById('loadingText');
+const CACHE_KEY = 'science_club_events_cache_v3'; 
+const CHAT_CACHE_KEY = 'science_club_chat_cache_v1';
 
-    <div class="loading-overlay" id="loadingOverlay">
-        <div class="spinner"></div>
-        <div class="loading-text" id="loadingText">処理中…</div>
-    </div>
+localStorage.removeItem('science_club_events_cache');
 
-    <!-- 全体レイアウトコンテナ -->
-    <div class="app-layout">
-        <!-- 🧭 左側縦タブバー -->
-        <nav class="sidebar">
-            <button class="nav-tab active" data-target="home-pane" title="ホーム">
-                <span class="nav-icon">🏠</span>
-                <span class="nav-label">ホーム</span>
-            </button>
-            <button class="nav-tab" data-target="drive-pane" title="Drive">
-                <span class="nav-icon">📁</span>
-                <span class="nav-label">Drive</span>
-            </button>
-            <button class="nav-tab" data-target="earthquake-pane" title="地震">
-                <span class="nav-icon">🌋</span>
-                <span class="nav-label">地震</span>
-            </button>
-            <button class="nav-tab" data-target="weather-pane" title="天気">
-                <span class="nav-icon">☀️</span>
-                <span class="nav-label">天気</span>
-            </button>
+function showLoading(msg = '処理中…') {
+  if (loadingText) loadingText.textContent = msg;
+  if (loadingOverlay) loadingOverlay.style.display = 'flex';
+}
 
-            <!-- 🕒 時計（時間）タブ・ポップアップメニュー -->
-            <div class="nav-item-wrapper" id="timeNavWrapper">
-                <button class="nav-tab" data-target="alarm-pane" title="時計">
-                    <span class="nav-icon">🕒</span>
-                    <span class="nav-label">時計</span>
-                </button>
-                <div class="sub-nav-popup" id="subNavPopup">
-                    <button class="sub-nav-tab active" data-target="alarm-pane">
-                        <span class="nav-icon">⏰</span>
-                        <span class="sub-label">アラーム</span>
-                    </button>
-                    <button class="sub-nav-tab" data-target="timer-pane">
-                        <span class="nav-icon">⏲️</span>
-                        <span class="sub-label">タイマー</span>
-                    </button>
-                    <button class="sub-nav-tab" data-target="stopwatch-pane">
-                        <span class="nav-icon">⏱️</span>
-                        <span class="sub-label">ストップウォッチ</span>
-                    </button>
-                </div>
-            </div>
+function hideLoading() {
+  if (loadingOverlay) loadingOverlay.style.display = 'none';
+}
 
-            <button class="nav-tab" data-target="info-pane" title="情報">
-                <span class="nav-icon">ℹ️</span>
-                <span class="nav-label">情報</span>
-            </button>
-        </nav>
+const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzVQBAkt6k3a0WJq7joAvtp0mFMuHZDjmgaRxmBS_gvRH5dTR-wc6TF_u-2-BBvt6Lpgw/exec";
 
-        <!-- 🖥️ 右側メインコンテンツ領域 -->
-        <main class="main-content">
-            <!-- ホームタブ（スケジュール兼チャット） -->
-            <div class="tab-pane active" id="home-pane">
-                <div class="container-inner">
-                    <div class="header-container">
-                        <h1>🧪 科学部 予定管理</h1>
-                        <div class="header-buttons">
-                            <button class="weekly-btn" id="openWeeklyBtn">📋 週間行事予定表</button>
-                            <button class="schedule-btn" id="openMonthlyBtn">📄 月間行事予定表</button>
-                            <button class="annual-btn" id="openAnnualBtn">📅 年間行事予定表</button>
-                            <!-- 重要なお知らせエリア -->
-                            <div id="importanceCard" class="importance-card" style="display: none;"></div>
-                            <button class="help-btn" id="openHelpBtn">❓ 使い方</button>
-                        </div>
-                    </div>
+async function fetchGasApi(options = {}, maxRetries = 2) {
+  let attempt = 0;
+  
+  while (attempt < maxRetries) {
+    try {
+      attempt++;
+      const url = options.url || GAS_WEB_APP_URL;
+      const method = options.method || 'GET';
+      
+      let fetchOptions = {
+        method: method,
+        redirect: 'follow'
+      };
 
-                    <div id='calendar'></div>
+      if (method === 'POST') {
+        fetchOptions.body = JSON.stringify(options.body || {});
+        fetchOptions.headers = { 'Content-Type': 'text/plain;charset=utf-8' };
+      }
 
-                    <div class="form-container">
-                        <h2>📅 予定を追加する</h2>
-                        
-                        <div class="form-group">
-                            <label for="eventTitle">予定の名前（※重要な時は先頭に * を付ける）</label>
-                            <input type="text" id="eventTitle" placeholder="（例：夏合宿、*秋分の日）">
-                        </div>
+      const response = await fetch(url, fetchOptions);
+      if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+      
+      const json = await response.json();
+      
+      if (json && json.error) {
+        alert("エラーが発生しました:\n" + json.error);
+        throw new Error(json.error);
+      }
 
-                        <div class="form-group">
-                            <label>期間指定　↓のみで一日だけ指定</label>
-                            <div class="form-row">
-                                <div class="field-box"><input type="date" id="eventStartDate"></div>
-                                <div class="range-separator">〜</div>
-                                <div class="field-box"><input type="date" id="eventEndDate"></div>
-                            </div>
-                        </div>
+      return json;
 
-                        <div class="form-group">
-                            <div class="checkbox-container">
-                                <input type="checkbox" id="allDayCheck" checked>
-                                <label for="allDayCheck" style="margin:0; cursor:pointer;">終日</label>
-                            </div>
-                        </div>
+    } catch (err) {
+      console.warn(`通信試行 (${attempt}/${maxRetries}):`, err.message);
 
-                        <div class="form-group">
-                            <label>時間指定</label>
-                            <div class="form-row">
-                                <div class="field-box"><input type="time" id="eventStartTime" disabled></div>
-                                <div class="range-separator">〜</div>
-                                <div class="field-box"><input type="time" id="eventEndTime" disabled></div>
-                            </div>
-                        </div>
+      if (attempt < maxRetries) {
+        await new Promise(res => setTimeout(res, 1000));
+      } else {
+        hideLoading();
+        throw err;
+      }
+    }
+  }
+}
 
-                        <button class="submit-btn" id="addBtn">カレンダーに追加</button>
-                    </div>
+function formatEvents(data) {
+  if (!Array.isArray(data)) return [];
+  return data.map(event => {
+    let isAllDay = true;
+    if (event.all_day !== undefined) {
+      isAllDay = event.all_day;
+    } else if (event.allDay !== undefined) {
+      isAllDay = event.allDay;
+    } else {
+      isAllDay = !event.start || !event.start.includes('T');
+    }
 
-                    <!-- 📌 最下部のバージョン・更新履歴セクション -->
-                    <footer class="version-footer">
-                        <div class="version-card">
-                            <h3>📌 バージョン・更新履歴</h3>
-                            <div class="version-content" id="versionContent">
-                                読み込み中…
-                            </div>
-                        </div>
-                    </footer>
-                </div>
+    return {
+      id: event.id,
+      title: event.title,
+      start: event.start,
+      end: event.end || null,
+      allDay: isAllDay
+    };
+  });
+}
 
-                <!-- 💬 右下のチャット起動ボタン（ホーム内） -->
-                <button class="chat-float-btn" id="openChatBtn">
-                    💬 部内チャット
-                </button>
-            </div>
+// 📌 README.md の読み込み
+async function loadReadmeVersion() {
+  const versionContentEl = document.getElementById('versionContent');
+  if (!versionContentEl) return;
+  try {
+    const readmePath = ['.', 'README.md'].join('/');
+    const res = await fetch(`${readmePath}?v=${Date.now()}`);
+    if (!res.ok) throw new Error("README.mdが見つかりませんでした");
+    
+    const markdownText = await res.text();
+    const startTag = '<!-- AUTO-UPDATE:START -->';
+    const endTag = '<!-- AUTO-UPDATE:END -->';
+    
+    const startIndex = markdownText.indexOf(startTag);
+    const endIndex = markdownText.indexOf(endTag);
+    
+    if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+      const rawContent = markdownText.substring(startIndex + startTag.length, endIndex).trim();
+      const lines = rawContent.split('\n').map(line => line.trim()).filter(line => line.startsWith('-'));
+      
+      if (lines.length > 0) {
+        let htmlList = '<ul>';
+        lines.forEach(line => {
+          const itemText = line.replace(/^-/, '').trim();
+          htmlList += `<li>${itemText}</li>`;
+        });
+        htmlList += '</ul>';
+        versionContentEl.innerHTML = htmlList;
+      } else {
+        versionContentEl.textContent = rawContent;
+      }
+    } else {
+      versionContentEl.textContent = "更新履歴が見つかりませんでした。";
+    }
+  } catch (e) {
+    console.warn("バージョン情報の読み込みに失敗:", e);
+    versionContentEl.textContent = "バージョン情報の取得に失敗しました。";
+  }
+}
 
-            <!-- ドライブタブ（iframe埋め込み） -->
-            <div class="tab-pane" id="drive-pane">
-                <iframe src="https://script.google.com/macros/s/AKfycbyUfFWD0YhcATtz3hXMBq6ksLSmnQ3gYJd_mDDiF-w9BOEGXUekHrVBP_EiBc378uSJWw/exec" class="full-iframe" allowfullscreen></iframe>
-            </div>
+// ℹ️ info.md の読み込み＆ --- 区切りセクション分け描画
+async function loadInfoContent() {
+  const infoContainer = document.getElementById('infoContentContainer');
+  if (!infoContainer) return;
+  try {
+    const res = await fetch(`./info.md?v=${Date.now()}`);
+    if (!res.ok) throw new Error("info.mdが見つかりませんでした");
+    const text = await res.text();
+    
+    const sections = text.split(/---+/);
+    let html = '';
+    
+    sections.forEach(sec => {
+      const trimmed = sec.trim();
+      if (!trimmed) return;
+      
+      html += '<div class="info-section">';
+      const lines = trimmed.split('\n');
+      lines.forEach(line => {
+        const l = line.trim();
+        if (l.startsWith('# ')) {
+          html += `<h3 style="margin-top:0; color:#007bff;">${l.replace('# ', '')}</h3>`;
+        } else if (l.startsWith('## ')) {
+          html += `<h4 style="margin-top:10px; color:#333;">${l.replace('## ', '')}</h4>`;
+        } else if (l.startsWith('- ')) {
+          html += `<ul style="margin: 5px 0; padding-left: 20px;"><li>${l.replace('- ', '')}</li></ul>`;
+        } else if (l !== '') {
+          html += `<p style="margin: 5px 0;">${l}</p>`;
+        }
+      });
+      html += '</div>';
+    });
+    
+    infoContainer.innerHTML = html || '<div style="color:#666;">お知らせはありません。</div>';
+  } catch (err) {
+    console.warn("info.md読み込みエラー:", err);
+    infoContainer.innerHTML = '<div style="color:#666;">お知らせ情報を読み込めませんでした。</div>';
+  }
+}
 
-            <!-- 地震タブ（iframe埋め込み：Wolfx WebSocket連携ページ） -->
-            <div class="tab-pane" id="earthquake-pane">
-                <iframe src="https://maps.zaritsuri.com/test/index.html" class="full-iframe" allowfullscreen></iframe>
-            </div>
+// 🚨 importance.txt の読み込み＆重要なお知らせ表示処理
+async function loadImportance() {
+  const importanceCard = document.getElementById('importanceCard');
+  if (!importanceCard) return;
 
-            <!-- 天気タブ -->
-            <div class="tab-pane" id="weather-pane">
-                <div class="container-inner">
-                    <h1 style="margin-bottom: 20px;">☀️ 気象情報・警報一覧</h1>
-                    
-                    <div class="weather-card">
-                        <h3>盛岡地方 3日間天気予報</h3>
-                        <div class="form-group" style="margin-top: 15px; max-width: 300px;">
-                            <label for="weatherCitySelect">対象地域を選択</label>
-                            <select id="weatherCitySelect">
-                                <option value="0320100">盛岡市</option>
-                                <option value="0332200">矢巾町</option>
-                                <option value="0332100">紫波町</option>
-                            </select>
-                        </div>
-                        <div id="weatherForecastContainer" class="weather-forecast-grid">
-                            <div style="color: #666;">天気予報を読み込み中…</div>
-                        </div>
-                    </div>
+  try {
+    const res = await fetch(`./importance.txt?v=${Date.now()}`);
+    if (!res.ok) {
+      importanceCard.style.display = 'none';
+      return;
+    }
 
-                    <div class="weather-card">
-                        <h3>岩手県の警報・注意報（ウェザーニュース）</h3>
-                        <div class="weather-iframe-container">
-                            <iframe src="https://weathernews.jp/onebox/warn/iwate/" title="ウェザーニュース 岩手県の警報・注意報"></iframe>
-                        </div>
-                    </div>
-                </div>
-            </div>
+    const text = await res.text();
+    const trimmedText = text.trim();
 
-            <!-- アラームタブ -->
-            <div class="tab-pane" id="alarm-pane">
-                <div class="container-inner">
-                    <h1 style="margin-bottom: 20px;">⏰ アラーム & サウンド設定</h1>
-                    
-                    <!-- 🎵 サウンド設定カード -->
-                    <div class="weather-card" style="max-width: 500px; margin-bottom: 20px;">
-                        <h3 style="margin-bottom: 10px;">🎵 アラーム・タイマー音のカスタマイズ</h3>
-                        <p style="font-size: 0.85rem; color: #666; margin-bottom: 15px;">好きな音声ファイル（mp3, wav等）をアップロードして通知音を変更できます（タイマー側と連動します）。</p>
-                        
-                        <div class="form-group">
-                            <input type="file" id="soundFileInput" accept="audio/*" style="margin-bottom: 10px; display: block;">
-                        </div>
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <button class="submit-btn" id="uploadSoundBtn" style="background: #007bff; flex: 1;">音声を保存する</button>
-                            <button class="submit-btn" id="previewSoundBtn" style="background: #17a2b8; flex: 1;" disabled>試聴する</button>
-                            <button class="submit-btn" id="resetSoundBtn" style="background: #dc3545; display: none;">初期音源に戻す</button>
-                        </div>
-                        <div id="soundStatusText" style="margin-top: 10px; font-size: 0.85rem; color: #28a745;"></div>
-                    </div>
+    if (!trimmedText) {
+      importanceCard.style.display = 'none';
+      return;
+    }
 
-                    <div class="weather-card" style="max-width: 500px;">
-                        <div id="currentClock" style="font-size: 2.5rem; font-weight: bold; text-align: center; margin-bottom: 20px; color: #333;">00:00:00</div>
-                        <div class="form-group">
-                            <label for="alarmTimeInput">アラーム時刻設定</label>
-                            <input type="time" id="alarmTimeInput" class="form-control" style="padding: 8px; font-size: 1.1rem; width: 100%; height: 42px; border: 1px solid #ccc; border-radius: 6px;">
-                        </div>
-                        <button class="submit-btn" id="setAlarmBtn" style="margin-top: 10px;">アラームを追加</button>
-                        <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
-                        <h3>設定中のアラーム</h3>
-                        <div id="alarmList" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
-                            <div style="color: #666; font-size: 0.9rem;">設定されたアラームはありません</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+    let message = trimmedText;
+    let isRed = false;
 
-            <!-- タイマータブ -->
-            <div class="tab-pane" id="timer-pane">
-                <div class="container-inner">
-                    <h1 style="margin-bottom: 20px;">⏲️ タイマー & サウンド連携</h1>
-                    
-                    <!-- 🎵 サウンド設定連携カード -->
-                    <div class="weather-card" style="max-width: 500px; margin-bottom: 20px;">
-                        <h3 style="margin-bottom: 10px;">🎵 通知音の設定状態</h3>
-                        <p style="font-size: 0.85rem; color: #666; margin-bottom: 10px;">アラームタブで設定したカスタム音声は、こちらのタイマー終了時にも自動で共通適用されます。</p>
-                        <div id="timerSoundStatusText" style="font-size: 0.85rem; color: #28a745; font-weight: bold;"></div>
-                    </div>
+    if (message.startsWith('!')) {
+      isRed = true;
+      message = message.substring(1).trim();
+    }
 
-                    <div class="weather-card" style="max-width: 500px; text-align: center;">
-                        <div id="timerDisplay" style="font-size: 3rem; font-weight: bold; margin-bottom: 20px; color: #333;">03:00</div>
-                        <div id="timerInputs" style="display: flex; justify-content: center; gap: 10px; margin-bottom: 20px;">
-                            <div>
-                                <input type="number" id="timerMinutes" min="0" max="99" value="03" style="width: 70px; padding: 8px; font-size: 1.2rem; text-align: center; border: 1px solid #ccc; border-radius: 6px;"> 分
-                            </div>
-                            <div>
-                                <input type="number" id="timerSeconds" min="0" max="59" value="00" style="width: 70px; padding: 8px; font-size: 1.2rem; text-align: center; border: 1px solid #ccc; border-radius: 6px;"> 秒
-                            </div>
-                        </div>
-                        <div style="display: flex; gap: 10px; justify-content: center;">
-                            <button class="submit-btn" id="timerStartBtn" style="background: #28a745;">スタート</button>
-                            <button class="submit-btn" id="timerStopBtn" style="background: #ffc107; color: #333; display: none;">一時停止</button>
-                            <button class="submit-btn" id="timerResetBtn" style="background: #dc3545;">リセット</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+    if (!message) {
+      importanceCard.style.display = 'none';
+      return;
+    }
 
-            <!-- ストップウォッチタブ -->
-            <div class="tab-pane" id="stopwatch-pane">
-                <div class="container-inner">
-                    <h1 style="margin-bottom: 20px;">⏱️ ストップウォッチ</h1>
-                    <div class="weather-card" style="max-width: 500px; text-align: center;">
-                        <div id="swDisplay" style="font-size: 3rem; font-weight: bold; margin-bottom: 20px; color: #333;">00:00.00</div>
-                        <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 20px;">
-                            <button class="submit-btn" id="swStartBtn" style="background: #28a745;">スタート</button>
-                            <button class="submit-btn" id="swLapBtn" style="background: #17a2b8; display: none;">ラップ</button>
-                            <button class="submit-btn" id="swResetBtn" style="background: #dc3545;">リセット</button>
-                        </div>
-                        <div id="swLaps" style="max-height: 150px; overflow-y: auto; text-align: left; border-top: 1px solid #ddd; padding-top: 10px; font-size: 0.9rem; color: #555;"></div>
-                    </div>
-                </div>
-            </div>
+    const safeMessage = escapeHtml(message);
 
-            <!-- 情報タブ -->
-            <div class="tab-pane" id="info-pane">
-                <div class="container-inner">
-                    <h1 style="margin-bottom: 20px;">ℹ️ お知らせ・情報</h1>
-                    <div class="info-card" id="infoContentContainer">
-                        <div style="color: #666;">情報を読み込み中…</div>
-                    </div>
-                </div>
-            </div>
-        </main>
-    </div>
-
-    <!-- 💬 チャットモーダル・ポップアップ -->
-    <div class="chat-modal-overlay" id="chatModalOverlay">
-        <div class="chat-popup-container">
-            <div class="chat-header">
-                <h3>💬 科学部 部内チャット</h3>
-                <button class="chat-close-btn" id="closeChatBtn">&times;</button>
-            </div>
-            <div class="chat-messages-area" id="chatMessagesArea">
-                <div style="text-align: center; color: #888; margin-top: 20px;">メッセージを読み込み中…</div>
-            </div>
-            <div class="chat-input-area">
-                <div class="chat-input-row">
-                    <input type="text" id="chatNameInput" class="chat-name-input" placeholder="名前（例: 太郎）">
-                </div>
-                <div class="chat-input-row">
-                    <textarea id="chatTextInput" class="chat-text-input" placeholder="メッセージを入力... (Shift+Enterで改行)"></textarea>
-                    <button class="chat-send-btn" id="chatSendBtn">送信</button>
-                </div>
-            </div>
+    importanceCard.className = 'importance-card ' + (isRed ? 'importance-red' : 'importance-yellow');
+    importanceCard.innerHTML = `
+      <span>⚠️</span>
+      <div class="importance-scroll-wrapper">
+        <div class="importance-scroll-content">
+          <span class="importance-text-block">${safeMessage}</span>
         </div>
-    </div>
+      </div>
+    `;
+    importanceCard.style.display = 'flex';
 
-    <!-- 🔔 新着メンション通知ポップアップ -->
-    <div class="modal-overlay" id="mentionModal">
-        <div class="modal-content" style="text-align: center; max-width: 400px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <h3 style="margin: 0; color: #007bff;">🔔 新着のメンションがあります</h3>
-                <button class="modal-close-btn" id="closeMentionModal">&times;</button>
-            </div>
-            <div id="mentionPopupText" style="margin-bottom: 20px; color: #333; line-height: 1.5; text-align: left; background: #f8f9fa; padding: 12px; border-radius: 8px; font-size: 0.95rem; word-break: break-all; max-height: 150px; overflow-y: auto;"></div>
-            <button class="submit-btn" id="openChatFromMentionBtn">チャットを開く</button>
+    requestAnimationFrame(() => {
+      const wrapper = importanceCard.querySelector('.importance-scroll-wrapper');
+      const content = importanceCard.querySelector('.importance-scroll-content');
+      const firstBlock = importanceCard.querySelector('.importance-text-block');
+
+      if (wrapper && content && firstBlock) {
+        if (firstBlock.offsetWidth > wrapper.clientWidth + 1) {
+          firstBlock.innerHTML = safeMessage + '　　';
+
+          let span2 = document.createElement('span');
+          span2.className = 'importance-text-block';
+          span2.innerHTML = safeMessage + '　　';
+          content.appendChild(span2);
+
+          importanceCard.classList.add('has-overflow');
+        } else {
+          importanceCard.classList.remove('has-overflow');
+        }
+      }
+    });
+
+  } catch (err) {
+    console.warn("importance.txt読み込みエラー:", err);
+    importanceCard.style.display = 'none';
+  }
+}
+
+function escapeHtml(str) {
+  return str.replace(/[&<>'"]/g, 
+    tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+  );
+}
+
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ☀️ 天気予報API連携処理
+let jmaForecastCache = null;
+
+async function loadWeatherData() {
+  const forecastContainer = document.getElementById('weatherForecastContainer');
+  const citySelect = document.getElementById('weatherCitySelect');
+  if (!forecastContainer || !citySelect) return;
+
+  try {
+    if (!jmaForecastCache) {
+      const res = await fetch('https://www.jma.go.jp/bosai/forecast/data/forecast/030000.json');
+      if (!res.ok) throw new Error("天気予報の取得に失敗しました");
+      jmaForecastCache = await res.json();
+    }
+
+    renderWeatherForecast(citySelect.value);
+
+  } catch (err) {
+    console.warn("天気予報取得失敗:", err);
+    forecastContainer.innerHTML = '<div style="color: #dc3545;">天気予報データの取得に失敗しました。</div>';
+  }
+}
+
+function renderWeatherForecast(selectedCityCode) {
+  const forecastContainer = document.getElementById('weatherForecastContainer');
+  if (!forecastContainer || !jmaForecastCache || !jmaForecastCache[0]) return;
+
+  try {
+    const timeSeries = jmaForecastCache[0].timeSeries;
+    const weatherTimeSeries = timeSeries[0]; 
+    const timeDefines = weatherTimeSeries.timeDefines;
+    const areas = weatherTimeSeries.areas;
+
+    let targetArea = areas.find(a => a.area.code === selectedCityCode) || areas[0];
+
+    let html = '';
+    for (let i = 0; i < timeDefines.length; i++) {
+      const dateObj = new Date(timeDefines[i]);
+      const dateStr = `${dateObj.getMonth() + 1}月${dateObj.getDate()}日`;
+      const rawWeather = targetArea.weathers[i] || '情報なし';
+      
+      const formattedWeather = rawWeather.replace(/([雨晴曇雷])\s*([所由時])/g, '$1　$2').replace(/\s+/g, '　');
+
+      html += `
+        <div class="forecast-item">
+          <div class="forecast-date">${dateStr}</div>
+          <div class="forecast-text">${formattedWeather}</div>
         </div>
-    </div>
+      `;
+    }
+    forecastContainer.innerHTML = html;
+  } catch (e) {
+    console.warn("天気予報レンダリングエラー:", e);
+    forecastContainer.innerHTML = '<div style="color: #666;">予報データの解析に失敗しました。</div>';
+  }
+}
 
-    <!-- 使い方モーダル -->
-    <div class="modal-overlay" id="helpModal">
-        <div class="modal-content">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <h3 style="margin: 0;">📖 予定管理の使い方</h3>
-                <button class="modal-close-btn" id="closeHelpBtn">&times;</button>
-            </div>
-            <ul>
-                <li><strong>予定の確認:</strong> カレンダー上で科学部の予定を確認できます。</li>
-                <li><strong>祝日の登録:</strong> 予定名の先頭に <code>*</code> を入力すると赤背景（祝日）として登録されます。</li>
-                <li><strong>過去の予定:</strong> 既に終了した過去の予定は自動的にグレーアウト表示されます。</li>
-                <li><strong>予定の追加:</strong> フォームから「予定名」「期間」「時間」を設定して追加します。</li>
-                <li><strong>予定の削除:</strong> カレンダー上の予定をクリックして削除します。</li>
-                <li><strong>メンション機能:</strong> チャット内で <code>@名前</code> または <code>@all</code> と入力すると相手に通知できます。</li>
-            </ul>
-        </div>
-    </div>
+function formatTimeString(dateInput) {
+  if (!dateInput) return '';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '';
+  const hours = d.getHours();
+  const minutes = d.getMinutes().toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
 
-    <!-- 📄 行事予定表共通モーダル -->
-    <div class="modal-overlay" id="scheduleModal">
-        <div class="modal-content schedule-modal" id="scheduleModalContent">
-            <div class="schedule-header-row">
-                <h3 id="scheduleTitle">📄 行事予定表</h3>
-                <div class="pdf-controls">
-                    <button class="pdf-control-btn" id="zoomOutBtn" title="縮小">-</button>
-                    <button class="pdf-control-btn" id="zoomResetBtn" title="ズームリセット">100%</button>
-                    <button class="pdf-control-btn" id="zoomInBtn" title="拡大">+</button>
-                    <button class="pdf-control-btn" id="fullscreenBtn" title="全画面表示">⛶ 全画面</button>
-                    <button class="modal-close-btn" id="closeScheduleBtn">&times;</button>
-                </div>
-            </div>
-            <hr style="border: none; border-top: 1px solid #ddd; margin: 10px 0 12px 0;">
-            <div class="pdf-container" id="pdfContainer">
-                <iframe id="pdfFrame" src=""></iframe>
-            </div>
-        </div>
-    </div>
+document.addEventListener('DOMContentLoaded', function() {
+  loadReadmeVersion();
+  loadInfoContent();
+  loadImportance();
 
-    <!-- 外部JS読み込み -->
-    <script src="filter.js"></script>
-    <script src="db.js"></script>
-    <script src="alarm.js"></script>
-    <script src="timer.js"></script>
-    <script src="stopwatch.js"></script>
-    <script src="script.js"></script>
-</body>
-</html>
+  // --- 🧭 タブ切り替えロジック ---
+  const navTabs = document.querySelectorAll('.nav-tab');
+  const subNavTabs = document.querySelectorAll('.sub-nav-tab');
+  const tabPanes = document.querySelectorAll('.tab-pane');
+  const timeNavWrapper = document.getElementById('timeNavWrapper');
+
+  navTabs.forEach(tab => {
+    tab.addEventListener('click', (e) => {
+      const targetId = tab.getAttribute('data-target');
+
+      navTabs.forEach(t => t.classList.remove('active'));
+      subNavTabs.forEach(st => st.classList.remove('active'));
+      tab.classList.add('active');
+
+      if (tab.closest('#timeNavWrapper')) {
+        const defaultSub = document.querySelector('.sub-nav-tab[data-target="alarm-pane"]');
+        if (defaultSub) defaultSub.classList.add('active');
+      }
+
+      tabPanes.forEach(pane => {
+        pane.classList.remove('active');
+        if (pane.id === targetId) {
+          pane.classList.add('active');
+        }
+      });
+
+      if (targetId === 'weather-pane') {
+        loadWeatherData();
+      }
+
+      if (targetId === 'home-pane' && window.calendar) {
+        setTimeout(() => window.calendar.updateSize(), 50);
+      }
+    });
+  });
+
+  // --- ⏱️ サブメニュー（時間タブ内）のタブ切り替えロジック ---
+  subNavTabs.forEach(subTab => {
+    subTab.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const targetId = subTab.getAttribute('data-target');
+
+      navTabs.forEach(t => t.classList.remove('active'));
+      subNavTabs.forEach(st => st.classList.remove('active'));
+
+      const timeTabBtn = document.querySelector('#timeNavWrapper .nav-tab');
+      if (timeTabBtn) timeTabBtn.classList.add('active');
+      subTab.classList.add('active');
+
+      tabPanes.forEach(pane => {
+        pane.classList.remove('active');
+        if (pane.id === targetId) {
+          pane.classList.add('active');
+        }
+      });
+
+      if (timeNavWrapper) {
+        timeNavWrapper.classList.remove('active-popup');
+      }
+    });
+  });
+
+  const weatherCitySelect = document.getElementById('weatherCitySelect');
+  if (weatherCitySelect) {
+    weatherCitySelect.addEventListener('change', (e) => {
+      renderWeatherForecast(e.target.value);
+    });
+  }
+
+  // --- チャット機能関連のロジック ---
+  const openChatBtn = document.getElementById('openChatBtn');
+  const closeChatBtn = document.getElementById('closeChatBtn');
+  const chatModalOverlay = document.getElementById('chatModalOverlay');
+  const chatMessagesArea = document.getElementById('chatMessagesArea');
+  const chatNameInput = document.getElementById('chatNameInput');
+  const chatTextInput = document.getElementById('chatTextInput');
+  const chatSendBtn = document.getElementById('chatSendBtn');
+
+  // 🔔 メンションポップアップ関連の要素
+  const mentionModal = document.getElementById('mentionModal');
+  const closeMentionModal = document.getElementById('closeMentionModal');
+  const openChatFromMentionBtn = document.getElementById('openChatFromMentionBtn');
+  const mentionPopupText = document.getElementById('mentionPopupText');
+
+  let chatInterval = null;
+  let hasCheckedMention = false;
+
+  const savedName = localStorage.getItem('science_club_chat_name');
+  if (savedName && chatNameInput) {
+    chatNameInput.value = savedName;
+  }
+
+  // 🔔 新着メンション（個人 ＆ @all）のチェック処理
+  async function checkNewMentionsOnStartup() {
+    if (hasCheckedMention || !chatNameInput) return;
+    const myName = (chatNameInput.value || localStorage.getItem('science_club_chat_name') || '').trim();
+    if (!myName) return;
+
+    try {
+      const rawData = await fetchGasApi({ url: `${GAS_WEB_APP_URL}?action=getChat` });
+      if (!Array.isArray(rawData) || rawData.length === 0) return;
+
+      const validMessages = rawData.filter(msg => msg && msg.message && typeof msg.message === 'string' && msg.message.trim() !== '');
+      if (validMessages.length === 0) return;
+
+      const cachedChat = localStorage.getItem(CHAT_CACHE_KEY);
+      let lastReadDate = new Date(0);
+
+      if (cachedChat) {
+        try {
+          const parsedCache = JSON.parse(cachedChat);
+          if (parsedCache.length > 0) {
+            const lastCachedMsg = parsedCache[parsedCache.length - 1];
+            if (lastCachedMsg && lastCachedMsg.created_at) {
+              lastReadDate = new Date(lastCachedMsg.created_at);
+            }
+          }
+        } catch (e) {
+          console.warn("キャッシュ解析エラー:", e);
+        }
+      } else {
+        localStorage.setItem(CHAT_CACHE_KEY, JSON.stringify(validMessages));
+        return;
+      }
+
+      const escapedName = escapeRegExp(myName);
+      const myNameRegex = new RegExp(`@${escapedName}(\\s|$)`);
+      const allMentionRegex = /@all(\s|$)/i;
+
+      const unreadMentions = validMessages.filter(msg => {
+        if (!msg.created_at) return false;
+        const msgDate = new Date(msg.created_at);
+        const isNew = msgDate > lastReadDate;
+        const isOther = (msg.name !== myName);
+        
+        const hasMyMention = myNameRegex.test(msg.message);
+        const hasAllMention = allMentionRegex.test(msg.message);
+
+        return isNew && isOther && (hasMyMention || hasAllMention);
+      });
+
+      if (unreadMentions.length > 0 && mentionModal && mentionPopupText) {
+        hasCheckedMention = true;
+        const latest = unreadMentions[unreadMentions.length - 1];
+        const isAll = allMentionRegex.test(latest.message);
+        
+        const labelText = isAll ? '全員からのメンション (@all)' : 'あなた宛てのメンション';
+        mentionPopupText.innerHTML = `<strong>${escapeHtml(latest.name)}</strong>さんからの${labelText}:<br>「${escapeHtml(latest.message)}」`;
+        mentionModal.style.display = 'flex';
+      }
+    } catch (err) {
+      console.warn("メンションチェック失敗:", err);
+    }
+  }
+
+  setTimeout(checkNewMentionsOnStartup, 1000);
+
+  function closeMentionPopup() {
+    if (mentionModal) mentionModal.style.display = 'none';
+    syncCacheToLatest();
+  }
+
+  async function syncCacheToLatest() {
+    try {
+      const rawData = await fetchGasApi({ url: `${GAS_WEB_APP_URL}?action=getChat` });
+      if (Array.isArray(rawData)) {
+        const validMessages = rawData.filter(msg => msg && msg.message && typeof msg.message === 'string' && msg.message.trim() !== '');
+        localStorage.setItem(CHAT_CACHE_KEY, JSON.stringify(validMessages));
+      }
+    } catch (e) {
+      console.warn("キャッシュ同期失敗:", e);
+    }
+  }
+
+  if (closeMentionModal) closeMentionModal.addEventListener('click', closeMentionPopup);
+  if (mentionModal) {
+    mentionModal.addEventListener('click', (e) => {
+      if (e.target === mentionModal) closeMentionPopup();
+    });
+  }
+
+  if (openChatFromMentionBtn) {
+    openChatFromMentionBtn.addEventListener('click', () => {
+      closeMentionPopup();
+      openChatModal();
+    });
+  }
+
+  async function loadChatMessages(scrollToBottom = false) {
+    const cachedChat = localStorage.getItem(CHAT_CACHE_KEY);
+    if (cachedChat) {
+      try {
+        const parsed = JSON.parse(cachedChat);
+        const validMessages = parsed.filter(msg => msg && msg.message && typeof msg.message === 'string' && msg.message.trim() !== '');
+        renderChatMessages(validMessages, scrollToBottom);
+      } catch (e) {
+        console.warn("チャットキャッシュパースエラー:", e);
+      }
+    }
+
+    try {
+      const rawData = await fetchGasApi({ url: `${GAS_WEB_APP_URL}?action=getChat` });
+      if (Array.isArray(rawData)) {
+        const messages = rawData.filter(msg => msg && msg.message && typeof msg.message === 'string' && msg.message.trim() !== '');
+        localStorage.setItem(CHAT_CACHE_KEY, JSON.stringify(messages));
+        renderChatMessages(messages, scrollToBottom);
+      }
+    } catch (err) {
+      console.warn("チャット読み込み失敗:", err);
+    }
+  }
+
+  // 🔗 メッセージ内のURLリンク化＆プレビュー生成
+  function parseMessageBodyWithLinks(text) {
+    const safeText = escapeHtml(text);
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b[-a-zA-Z0-9()@:%_\+.~#?&//=]*)/g;
+
+    let foundUrls = [];
+    
+    const linkedHtml = safeText.replace(urlRegex, (match) => {
+      let href = match;
+      if (!href.startsWith('http://') && !href.startsWith('https://')) {
+        href = 'https://' + href;
+      }
+      foundUrls.push(href);
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color: #007bff; text-decoration: underline; word-break: break-all;">${match}</a>`;
+    });
+
+    let previewHtml = '';
+    if (foundUrls.length > 0) {
+      const targetUrl = foundUrls[0];
+      let domain = '';
+      try {
+        const parsedObj = new URL(targetUrl);
+        domain = parsedObj.hostname;
+      } catch(e) {
+        domain = targetUrl;
+      }
+
+      previewHtml = `
+        <a href="${targetUrl}" target="_blank" rel="noopener noreferrer" class="chat-link-preview" style="display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 8px 10px; background: #f1f3f5; border: 1px solid #e0e0e0; border-radius: 6px; text-decoration: none; color: inherit;">
+          <img src="https://www.google.com/s2/favicons?domain=${domain}&sz=32" alt="favicon" style="width: 16px; height: 16px; flex-shrink: 0;" onerror="this.style.display='none'">
+          <div style="overflow: hidden; min-width: 0;">
+            <div style="font-size: 0.8rem; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${domain}</div>
+            <div style="font-size: 0.85rem; font-weight: bold; color: #007bff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${targetUrl}</div>
+          </div>
+        </a>
+      `;
+    }
+
+    return `<div>${linkedHtml}</div>${previewHtml}`;
+  }
+
+  function renderChatMessages(messages, scrollToBottom) {
+    if (!chatMessagesArea || !chatNameInput) return;
+    const currentName = chatNameInput.value.trim();
+    chatMessagesArea.innerHTML = '';
+
+    if (messages.length === 0) {
+      chatMessagesArea.innerHTML = '<div style="text-align: center; color: #888; margin-top: 20px;">まだメッセージはありません。最初のメッセージを送ろう！</div>';
+      return;
+    }
+
+    messages.forEach(msg => {
+      const item = document.createElement('div');
+      item.className = 'chat-message-item';
+      if (currentName && msg.name === currentName) {
+        item.classList.add('my-message');
+      }
+
+      const header = document.createElement('div');
+      header.className = 'chat-msg-header';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'chat-msg-name';
+      nameSpan.textContent = msg.name || '名無し';
+
+      const timeSpan = document.createElement('span');
+      if (msg.created_at) {
+        const d = new Date(msg.created_at);
+        timeSpan.textContent = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      }
+
+      header.appendChild(nameSpan);
+      header.appendChild(timeSpan);
+
+      const body = document.createElement('div');
+      body.className = 'chat-msg-body';
+      body.innerHTML = parseMessageBodyWithLinks(msg.message || '');
+
+      item.appendChild(header);
+      item.appendChild(body);
+      chatMessagesArea.appendChild(item);
+    });
+
+    if (scrollToBottom) {
+      chatMessagesArea.scrollTop = chatMessagesArea.scrollHeight;
+    }
+  }
+
+  function openChatModal() {
+    if (chatModalOverlay) chatModalOverlay.style.display = 'flex';
+    loadChatMessages(true);
+    syncCacheToLatest();
+    if (!chatInterval) {
+      chatInterval = setInterval(() => loadChatMessages(false), 5000);
+    }
+  }
+
+  if (openChatBtn) openChatBtn.addEventListener('click', openChatModal);
+
+  function closeChatModal() {
+    if (chatModalOverlay) chatModalOverlay.style.display = 'none';
+    syncCacheToLatest();
+    if (chatInterval) {
+      clearInterval(chatInterval);
+      chatInterval = null;
+    }
+  }
+
+  if (closeChatBtn) closeChatBtn.addEventListener('click', closeChatModal);
+  if (chatModalOverlay) {
+    chatModalOverlay.addEventListener('click', (e) => {
+      if (e.target === chatModalOverlay) closeChatModal();
+    });
+  }
+
+  async function sendChatMessage() {
+    if (!chatNameInput || !chatTextInput || !chatSendBtn) return;
+    const name = chatNameInput.value.trim() || '名無し';
+    let message = chatTextInput.value.trim();
+
+    if (!message) return;
+
+    if (typeof filterChatText === 'function') {
+      message = filterChatText(message);
+    }
+
+    localStorage.setItem('science_club_chat_name', name);
+    chatTextInput.disabled = true;
+    chatSendBtn.disabled = true;
+
+    try {
+      await fetchGasApi({
+        method: 'POST',
+        body: {
+          action: 'insertChat',
+          name: name,
+          message: message
+        }
+      });
+
+      chatTextInput.value = '';
+      await loadChatMessages(true);
+      syncCacheToLatest();
+    } catch (err) {
+      alert('メッセージの送信に失敗しました');
+    } finally {
+      chatTextInput.disabled = false;
+      chatSendBtn.disabled = false;
+      chatTextInput.focus();
+    }
+  }
+
+  if (chatSendBtn) chatSendBtn.addEventListener('click', sendChatMessage);
+
+  if (chatTextInput) {
+    chatTextInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChatMessage();
+      }
+    });
+  }
+
+  // --- モーダル関連の処理 ---
+  const openHelpBtn = document.getElementById('openHelpBtn');
+  const closeHelpBtn = document.getElementById('closeHelpBtn');
+  const helpModal = document.getElementById('helpModal');
+
+  const openWeeklyBtn = document.getElementById('openWeeklyBtn');
+  const openMonthlyBtn = document.getElementById('openMonthlyBtn');
+  const openAnnualBtn = document.getElementById('openAnnualBtn');
+  const closeScheduleBtn = document.getElementById('closeScheduleBtn');
+  const scheduleModal = document.getElementById('scheduleModal');
+  const scheduleTitle = document.getElementById('scheduleTitle');
+  const pdfFrame = document.getElementById('pdfFrame');
+  const pdfContainer = document.getElementById('pdfContainer');
+
+  const zoomInBtn = document.getElementById('zoomInBtn');
+  const zoomOutBtn = document.getElementById('zoomOutBtn');
+  const zoomResetBtn = document.getElementById('zoomResetBtn');
+  const fullscreenBtn = document.getElementById('fullscreenBtn');
+
+  let currentScale = 1.0;
+
+  function updateZoom(newScale) {
+    if (!pdfFrame || !zoomResetBtn) return;
+    currentScale = Math.max(0.5, Math.min(3.0, newScale));
+    pdfFrame.style.width = `${(100 / currentScale)}%`;
+    pdfFrame.style.height = `${(100 / currentScale)}%`;
+    pdfFrame.style.transform = `scale(${currentScale})`;
+    zoomResetBtn.textContent = `${Math.round(currentScale * 100)}%`;
+  }
+
+  if (zoomInBtn) zoomInBtn.addEventListener('click', () => updateZoom(currentScale + 0.25));
+  if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => updateZoom(currentScale - 0.25));
+  if (zoomResetBtn) zoomResetBtn.addEventListener('click', () => updateZoom(1.0));
+
+  if (fullscreenBtn && pdfContainer) {
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        if (pdfContainer.requestFullscreen) {
+          pdfContainer.requestFullscreen();
+        } else if (pdfContainer.webkitRequestFullscreen) {
+          pdfContainer.webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
+      }
+    });
+  }
+
+  document.addEventListener('fullscreenchange', () => {
+    updateZoom(1.0);
+  });
+
+  if (openHelpBtn && helpModal) openHelpBtn.addEventListener('click', () => helpModal.style.display = 'flex');
+  if (closeHelpBtn && helpModal) closeHelpBtn.addEventListener('click', () => helpModal.style.display = 'none');
+  if (helpModal) {
+    helpModal.addEventListener('click', (e) => {
+      if (e.target === helpModal) helpModal.style.display = 'none';
+    });
+  }
+
+  // 📋 週間行事予定表ボタンの処理
+  if (openWeeklyBtn) {
+    openWeeklyBtn.addEventListener('click', async () => {
+      updateZoom(1.0);
+      const pdfUrl = ['.', 'weeklySchedule', 'schedule.pdf'].join('/');
+      if (scheduleTitle) scheduleTitle.textContent = "📋 週間行事予定表（読み込み中…）";
+      if (pdfFrame) pdfFrame.src = pdfUrl;
+      if (scheduleModal) scheduleModal.style.display = 'flex';
+
+      try {
+        const res = await fetch(pdfUrl, { method: 'HEAD' });
+        const lastModified = res.headers.get('Last-Modified');
+        if (lastModified && scheduleTitle) {
+          const fileDate = new Date(lastModified);
+          const monthNum = fileDate.getMonth() + 1;
+          const dayNum = fileDate.getDate();
+          scheduleTitle.textContent = `📋 週間行事予定表（${monthNum}月${dayNum}日更新）`;
+        } else if (scheduleTitle) {
+          scheduleTitle.textContent = "📋 週間行事予定表";
+        }
+      } catch (e) {
+        if (scheduleTitle) scheduleTitle.textContent = "📋 週間行事予定表";
+      }
+    });
+  }
+
+  // 📄 月間行事予定表ボタンの処理
+  if (openMonthlyBtn) {
+    openMonthlyBtn.addEventListener('click', async () => {
+      updateZoom(1.0);
+      const pdfUrl = ['.', 'monthlySchedule', 'schedule.pdf'].join('/');
+      if (scheduleTitle) scheduleTitle.textContent = "📄 月間行事予定表（読み込み中…）";
+      if (pdfFrame) pdfFrame.src = pdfUrl;
+      if (scheduleModal) scheduleModal.style.display = 'flex';
+
+      try {
+        const res = await fetch(pdfUrl, { method: 'HEAD' });
+        const lastModified = res.headers.get('Last-Modified');
+        if (lastModified && scheduleTitle) {
+          const fileDate = new Date(lastModified);
+          const monthNum = fileDate.getMonth() + 1;
+          scheduleTitle.textContent = `📄 月間行事予定表（${monthNum}月）`;
+        } else if (scheduleTitle) {
+          scheduleTitle.textContent = "📄 月間行事予定表";
+        }
+      } catch (e) {
+        if (scheduleTitle) scheduleTitle.textContent = "📄 月間行事予定表";
+      }
+    });
+  }
+
+  // 📅 年間行事予定表ボタンの処理
+  if (openAnnualBtn) {
+    openAnnualBtn.addEventListener('click', async () => {
+      updateZoom(1.0);
+      const pdfUrl = ['.', 'annualSchedule', 'schedule.pdf'].join('/');
+      if (scheduleTitle) scheduleTitle.textContent = "📅 年間行事予定表（読み込み中…）";
+      if (pdfFrame) pdfFrame.src = pdfUrl;
+      if (scheduleModal) scheduleModal.style.display = 'flex';
+
+      try {
+        const res = await fetch(pdfUrl, { method: 'HEAD' });
+        const lastModified = res.headers.get('Last-Modified');
+        if (lastModified && scheduleTitle) {
+          const fileDate = new Date(lastModified);
+          const yearNum = fileDate.getFullYear();
+          scheduleTitle.textContent = `📅 年間行事予定表（${yearNum}年）`;
+        } else if (scheduleTitle) {
+          scheduleTitle.textContent = "📅 年間行事予定表";
+        }
+      } catch (e) {
+        if (scheduleTitle) scheduleTitle.textContent = "📅 年間行事予定表";
+      }
+    });
+  }
+
+  if (closeScheduleBtn && scheduleModal && pdfFrame) {
+    closeScheduleBtn.addEventListener('click', () => {
+      scheduleModal.style.display = 'none';
+      pdfFrame.src = "";
+      if (document.fullscreenElement) document.exitFullscreen();
+    });
+  }
+
+  if (scheduleModal && pdfFrame) {
+    scheduleModal.addEventListener('click', (e) => {
+      if (e.target === scheduleModal) {
+        scheduleModal.style.display = 'none';
+        pdfFrame.src = "";
+        if (document.fullscreenElement) document.exitFullscreen();
+      }
+    });
+  }
+
+  // --- フォーム関連の処理 ---
+  const allDayCheck = document.getElementById('allDayCheck');
+  const eventStartTime = document.getElementById('eventStartTime');
+  const eventEndTime = document.getElementById('eventEndTime');
+  const eventStartDate = document.getElementById('eventStartDate');
+  const eventEndDate = document.getElementById('eventEndDate');
+
+  if (allDayCheck && eventStartTime && eventEndTime) {
+    allDayCheck.addEventListener('change', function() {
+      const isAllDay = this.checked;
+      eventStartTime.disabled = isAllDay;
+      eventEndTime.disabled = isAllDay;
+      if (isAllDay) {
+        eventStartTime.value = '';
+        eventEndTime.value = '';
+      }
+    });
+  }
+
+  if (eventStartDate && eventEndDate) {
+    eventStartDate.addEventListener('change', function() {
+      if (!eventEndDate.value) {
+        eventEndDate.value = this.value;
+      }
+    });
+  }
+
+  var calendarEl = document.getElementById('calendar');
+  var eventTitleInput = document.getElementById('eventTitle');
+  var addBtn = document.getElementById('addBtn');
+
+  if (!calendarEl) return;
+
+  var calendar = new FullCalendar.Calendar(calendarEl, {
+    initialView: 'dayGridMonth',
+    locale: 'ja',
+    displayEventTime: true,
+    displayEventEnd: true,
+    
+    headerToolbar: {
+      left: 'prev,next',
+      center: 'title',
+      right: 'today'
+    },
+
+    eventContent: function(arg) {
+      let nodes = [];
+
+      if (!arg.event.allDay) {
+        let dot = document.createElement('div');
+        dot.className = 'fc-daygrid-event-dot';
+        nodes.push(dot);
+      }
+
+      let rawTitle = arg.event.title || '';
+      let displayTitle = rawTitle.startsWith('*') ? rawTitle.slice(1) : rawTitle;
+
+      let timeText = '';
+      if (!arg.event.allDay && arg.event.start) {
+        const startStr = formatTimeString(arg.event.start);
+        const endStr = formatTimeString(arg.event.end);
+        if (startStr && endStr) {
+          timeText = `${startStr}〜${endStr} `;
+        } else if (startStr) {
+          timeText = `${startStr} `;
+        }
+      }
+
+      let baseText = timeText + displayTitle;
+
+      let wrapper = document.createElement('div');
+      wrapper.className = 'fc-event-scroll-wrapper';
+
+      let content = document.createElement('div');
+      content.className = 'fc-event-scroll-content';
+
+      let span1 = document.createElement('span');
+      span1.className = 'fc-event-text-block';
+      span1.innerText = baseText;
+
+      content.appendChild(span1);
+      wrapper.appendChild(content);
+      nodes.push(wrapper);
+
+      return { domNodes: nodes };
+    },
+
+    eventDidMount: function(arg) {
+      const el = arg.el;
+      const rawTitle = arg.event.title || '';
+
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+
+      const eventTargetDate = arg.event.end ? new Date(arg.event.end) : new Date(arg.event.start);
+      if (arg.event.allDay && arg.event.end) {
+        eventTargetDate.setTime(eventTargetDate.getTime() - 1);
+      }
+
+      if (eventTargetDate < now) {
+        el.classList.add('is-past');
+      } else if (rawTitle.startsWith('*')) {
+        el.classList.add('is-holiday');
+      }
+
+      requestAnimationFrame(() => {
+        const wrapper = el.querySelector('.fc-event-scroll-wrapper');
+        const content = el.querySelector('.fc-event-scroll-content');
+        const firstBlock = el.querySelector('.fc-event-text-block');
+        
+        if (wrapper && firstBlock && content) {
+          if (firstBlock.offsetWidth > wrapper.clientWidth + 1) {
+            let displayTitle = rawTitle.startsWith('*') ? rawTitle.slice(1) : rawTitle;
+            
+            let timeText = '';
+            if (!arg.event.allDay && arg.event.start) {
+              const startStr = formatTimeString(arg.event.start);
+              const endStr = formatTimeString(arg.event.end);
+              if (startStr && endStr) {
+                timeText = `${startStr}〜${endStr} `;
+              } else if (startStr) {
+                timeText = `${startStr} `;
+              }
+            }
+
+            let baseText = timeText + displayTitle;
+
+            firstBlock.innerText = baseText + '　　';
+
+            const existingBlocks = content.querySelectorAll('.fc-event-text-block');
+            if (existingBlocks.length > 1) {
+              existingBlocks[1].remove();
+            }
+
+            let span2 = document.createElement('span');
+            span2.className = 'fc-event-text-block';
+            span2.innerText = baseText + '　　';
+            content.appendChild(span2);
+
+            el.classList.add('has-overflow');
+          } else {
+            el.classList.remove('has-overflow');
+            const existingBlocks = content.querySelectorAll('.fc-event-text-block');
+            if (existingBlocks.length > 1) {
+              existingBlocks[1].remove();
+            }
+          }
+        }
+      });
+    },
+
+    events: async function(fetchInfo, successCallback, failureCallback) {
+      const cachedData = localStorage.getItem(CACHE_KEY);
+      if (cachedData) {
+        try {
+          const parsedCache = JSON.parse(cachedData);
+          successCallback(formatEvents(parsedCache));
+        } catch (e) {
+          console.warn("キャッシュパースエラー:", e);
+        }
+      }
+
+      try {
+        const freshData = await fetchGasApi();
+        if (Array.isArray(freshData)) {
+          localStorage.setItem(CACHE_KEY, JSON.stringify(freshData));
+          
+          if (!cachedData) {
+            successCallback(formatEvents(freshData));
+          }
+        }
+      } catch (err) {
+        if (!cachedData) {
+          failureCallback(err);
+        }
+      }
+    },
+
+    eventClick: async function(info) {
+      let displayTitle = info.event.title.startsWith('*') ? info.event.title.slice(1) : info.event.title;
+      if (confirm('「' + displayTitle + '」を削除しますか？')) {
+        showLoading('削除中…');
+        try {
+          await fetchGasApi({
+            method: 'POST',
+            body: { action: 'delete', id: info.event.id }
+          });
+
+          const cachedData = localStorage.getItem(CACHE_KEY);
+          if (cachedData) {
+            const parsed = JSON.parse(cachedData).filter(item => String(item.id) !== String(info.event.id));
+            localStorage.setItem(CACHE_KEY, JSON.stringify(parsed));
+          }
+
+          calendar.refetchEvents();
+
+        } catch (err) {
+          alert('削除に失敗しました');
+        } finally {
+          hideLoading();
+        }
+      }
+    }
+  });
+
+  calendar.render();
+  window.calendar = calendar;
+
+  if (addBtn) {
+    addBtn.addEventListener('click', async function() {
+      var title = eventTitleInput ? eventTitleInput.value.trim() : '';
+      var startDate = eventStartDate ? eventStartDate.value : '';
+      var endDate = eventEndDate ? eventEndDate.value || startDate : '';
+      var isAllDay = allDayCheck ? allDayCheck.checked : true;
+      var startTime = eventStartTime ? eventStartTime.value : '';
+      var endTime = eventEndTime ? eventEndTime.value : '';
+
+      if (!title || !startDate) {
+        alert('予定の名前と開始日を入力してください');
+        return;
+      }
+
+      let startIso = '';
+      let endIso = '';
+
+      if (isAllDay) {
+        startIso = startDate;
+        let endD = new Date(endDate);
+        endD.setDate(endD.getDate() + 1);
+        endIso = endD.toISOString().split('T')[0];
+      } else {
+        if (!startTime) {
+          alert('開始時間を入力してください');
+          return;
+        }
+        startIso = `${startDate}T${startTime}:00+09:00`;
+        if (endTime) {
+          endIso = `${endDate}T${endTime}:00+09:00`;
+        } else {
+          let [sh, sm] = startTime.split(':').map(Number);
+          let eh = (sh + 1) % 24;
+          let emStr = sm.toString().padStart(2, '0');
+          let ehStr = eh.toString().padStart(2, '0');
+          endIso = `${endDate}T${ehStr}:${emStr}:00+09:00`;
+        }
+      }
+
+      const newEventPayload = {
+        title: title, 
+        start: startIso, 
+        end: endIso, 
+        all_day: isAllDay
+      };
+
+      showLoading('追加中…');
+      try {
+        const res = await fetchGasApi({
+          method: 'POST',
+          body: {
+            action: 'insert',
+            data: [newEventPayload]
+          }
+        });
+
+        if (res) {
+          const insertedItem = Array.isArray(res) ? res[0] : res;
+          const createdEvent = {
+            id: insertedItem.id || Date.now(),
+            title: title,
+            start: startIso,
+            end: endIso,
+            allDay: isAllDay
+          };
+
+          const cachedData = localStorage.getItem(CACHE_KEY);
+          let currentCache = cachedData ? JSON.parse(cachedData) : [];
+          currentCache.push(insertedItem.id ? insertedItem : createdEvent);
+          localStorage.setItem(CACHE_KEY, JSON.stringify(currentCache));
+
+          calendar.refetchEvents();
+
+          if (eventTitleInput) eventTitleInput.value = '';
+          if (eventStartDate) eventStartDate.value = '';
+          if (eventEndDate) eventEndDate.value = '';
+          if (eventStartTime) eventStartTime.value = '';
+          if (eventEndTime) eventEndTime.value = '';
+          if (allDayCheck) allDayCheck.checked = true;
+          if (eventStartTime) eventStartTime.disabled = true;
+          if (eventEndTime) eventEndTime.disabled = true;
+        }
+
+      } catch (err) {
+        alert('予定の追加に失敗しました');
+      } finally {
+        hideLoading();
+      }
+    });
+  }
+});

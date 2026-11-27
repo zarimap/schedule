@@ -318,22 +318,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // --- 🧭 タブ切り替えロジック ---
   const navTabs = document.querySelectorAll('.nav-tab');
-  const subNavTabs = document.querySelectorAll('.sub-nav-tab');
   const tabPanes = document.querySelectorAll('.tab-pane');
-  const timeNavWrapper = document.getElementById('timeNavWrapper');
 
   navTabs.forEach(tab => {
     tab.addEventListener('click', (e) => {
       const targetId = tab.getAttribute('data-target');
 
       navTabs.forEach(t => t.classList.remove('active'));
-      subNavTabs.forEach(st => st.classList.remove('active'));
       tab.classList.add('active');
-
-      if (tab.closest('#timeNavWrapper')) {
-        const defaultSub = document.querySelector('.sub-nav-tab[data-target="alarm-pane"]');
-        if (defaultSub) defaultSub.classList.add('active');
-      }
 
       tabPanes.forEach(pane => {
         pane.classList.remove('active');
@@ -348,32 +340,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
       if (targetId === 'home-pane' && window.calendar) {
         setTimeout(() => window.calendar.updateSize(), 50);
-      }
-    });
-  });
-
-  // --- ⏱️ サブメニュー（時間タブ内）のタブ切り替えロジック ---
-  subNavTabs.forEach(subTab => {
-    subTab.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const targetId = subTab.getAttribute('data-target');
-
-      navTabs.forEach(t => t.classList.remove('active'));
-      subNavTabs.forEach(st => st.classList.remove('active'));
-
-      const timeTabBtn = document.querySelector('#timeNavWrapper .nav-tab');
-      if (timeTabBtn) timeTabBtn.classList.add('active');
-      subTab.classList.add('active');
-
-      tabPanes.forEach(pane => {
-        pane.classList.remove('active');
-        if (pane.id === targetId) {
-          pane.classList.add('active');
-        }
-      });
-
-      if (timeNavWrapper) {
-        timeNavWrapper.classList.remove('active-popup');
       }
     });
   });
