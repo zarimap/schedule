@@ -1,3 +1,82 @@
+const VAPID_PUBLIC_KEY = 'BI1i052G5oa0vkOIyKBk0OMuTiaF7DSascM_n6IHFcp8L5lsijU8LvvuRE1OkfzI6KRrpIB6YtPKjSPI48WilzQ';
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+async function registerPushSubscription(askPermission = true) {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    if (askPermission) {
+      alert('このブラウザはプッシュ通知に対応していません。\niPadの場合はSafariの「共有」→「ホーム画面に追加」から開いてください。');
+    }
+    return false;
+  }
+
+  if (!VAPID_PUBLIC_KEY || VAPID_PUBLIC_KEY === 'YOUR_VAPID_PUBLIC_KEY') {
+    if (askPermission) {
+      alert('script.js に VAPID_PUBLIC_KEY を設定してください。');
+    }
+    return false;
+  }
+
+  try {
+    if (askPermission) {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        alert('通知が許可されませんでした。端末の設定から通知をオンにしてください。');
+        return false;
+      }
+    } else if (Notification.permission !== 'granted') {
+      return false;
+    }
+
+    await navigator.serviceWorker.register('./sw.js');
+    const registration = await navigator.serviceWorker.ready;
+
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+    }
+
+    const subJson = subscription.toJSON();
+    const userName = (localStorage.getItem('science_club_chat_name') || '').trim();
+
+    await fetchGasApi({
+      method: 'POST',
+      body: {
+        action: 'saveSubscription',
+        endpoint: subJson.endpoint,
+        p256dh: subJson.keys.p256dh,
+        auth: subJson.keys.auth,
+        user_name: userName
+      }
+    });
+
+    const btn = document.getElementById('enablePushBtn');
+    if (btn) {
+      btn.textContent = '🔔 通知設定済み';
+      btn.style.backgroundColor = '#28a745';
+    }
+    return true;
+  } catch (err) {
+    console.warn('Push登録エラー:', err);
+    if (askPermission) {
+      alert('通知の登録に失敗しました:\n' + err.message);
+    }
+    return false;
+  }
+}
+
 const loadingOverlay = document.getElementById('loadingOverlay');
 const loadingText = document.getElementById('loadingText');
 const CACHE_KEY = 'science_club_events_cache_v3'; 
@@ -316,6 +395,24 @@ document.addEventListener('DOMContentLoaded', function() {
   loadInfoContent();
   loadImportance();
 
+  const enablePushBtn = document.getElementById('enablePushBtn');
+  if (enablePushBtn) {
+    enablePushBtn.addEventListener('click', async () => {
+      const ok = await registerPushSubscription(true);
+      if (ok) {
+        const currentName = (localStorage.getItem('science_club_chat_name') || '').trim();
+        if (currentName) {
+          alert('プッシュ通知を有効にしました！');
+        } else {
+          alert('プッシュ通知を有効にしました！\nチャット画面で自分の名前を入力して送信すると、自分宛てのメンション通知も届きます。');
+        }
+      }
+    });
+  }
+  if ('Notification' in window && Notification.permission === 'granted') {
+    registerPushSubscription(false);
+  }
+
   // --- 🧭 タブ切り替えロジック ---
   const navTabs = document.querySelectorAll('.nav-tab');
   const tabPanes = document.querySelectorAll('.tab-pane');
@@ -621,6 +718,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     localStorage.setItem('science_club_chat_name', name);
+    if ('Notification' in window && Notification.permission === 'granted') {
+      registerPushSubscription(false);
+    }
     chatTextInput.disabled = true;
     chatSendBtn.disabled = true;
 
