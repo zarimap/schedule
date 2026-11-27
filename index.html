@@ -10,10 +10,14 @@
     <title>科学部 予定管理</title>
     <link rel="icon" href="./favicon.ico" type="image/x-icon">
     <link rel="apple-touch-icon" size="180x180" href="apple-touch-icon.png">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <meta name="theme-color" content="#007bff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="科学部予定">
     <!-- FullCalendar v6 -->
     <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
     <!-- 外部CSS読み込み -->
-    <link rel="stylesheet" href="style.css?v=2">
+    <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 
@@ -68,6 +72,7 @@
                             <button class="annual-btn" id="openAnnualBtn">📅 年間行事予定表</button>
                             <!-- 重要なお知らせエリア -->
                             <div id="importanceCard" class="importance-card" style="display: none;"></div>
+                            <button class="help-btn" id="enablePushBtn" style="background-color: #6f42c1;">🔔 通知ON</button>
                             <button class="help-btn" id="openHelpBtn">❓ 使い方</button>
                         </div>
                     </div>
